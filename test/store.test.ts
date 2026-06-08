@@ -31,4 +31,38 @@ describe('NoteStore', () => {
     expect(store.delete(n.id)).toBe(true);
     expect(store.delete(n.id)).toBe(false);
   });
+
+  it('stores and retrieves an attachment with size derived from the bytes', () => {
+    const store = new NoteStore();
+    const n = store.create({ title: 't', body: 'b' });
+    const data = Buffer.from('payload');
+    const meta = store.addAttachment(n.id, { filename: 'f.txt', contentType: 'text/plain', data });
+    expect(meta).toEqual({ filename: 'f.txt', size: data.length, contentType: 'text/plain' });
+
+    const stored = store.getAttachment(n.id, 'f.txt');
+    expect(stored?.metadata).toEqual(meta);
+    expect(stored?.data).toEqual(data);
+  });
+
+  it('does not store attachments for unknown notes', () => {
+    const store = new NoteStore();
+    expect(
+      store.addAttachment('nope', { filename: 'f.txt', contentType: 'text/plain', data: Buffer.from('x') }),
+    ).toBeUndefined();
+    expect(store.getAttachment('nope', 'f.txt')).toBeUndefined();
+  });
+
+  it('returns undefined for an unknown attachment on an existing note', () => {
+    const store = new NoteStore();
+    const n = store.create({ title: 't', body: 'b' });
+    expect(store.getAttachment(n.id, 'missing.txt')).toBeUndefined();
+  });
+
+  it('drops attachments when their note is deleted', () => {
+    const store = new NoteStore();
+    const n = store.create({ title: 't', body: 'b' });
+    store.addAttachment(n.id, { filename: 'f.txt', contentType: 'text/plain', data: Buffer.from('x') });
+    expect(store.delete(n.id)).toBe(true);
+    expect(store.getAttachment(n.id, 'f.txt')).toBeUndefined();
+  });
 });
