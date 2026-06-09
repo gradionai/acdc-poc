@@ -12,12 +12,12 @@ fairness note.
 | Metric | A1 | A2 | B1 | B2 |
 |--------|----|----|----|----|
 | Rework cycles (Verify→Solve iterations before green) | **0** (self-verify found 0 issues on 1st pass) | **0** | | |
-| Issues caught — count & stage | **Pre-PR self-verify (`analyze_code_snippet`): 0 on changed code (2 pre-existing MINOR in untouched code, out of scope). PR-Sonar/Gitar: pending PR** | **Sonar: 5 new (gate PASSED, non-blocking); Gitar: 1 (quality)** | | |
-| Regressions or test failures (stage caught) | **None** (15/15, CI green) | **None** (CI green) | | |
-| Escaped issues at end | **pending PR + checklist scoring** | **Security: 0 escaped (1 partial). Gitar test-quality finding left unaddressed.** | | |
+| Issues caught — count & stage | **Pre-PR self-verify (`analyze_code_snippet`): 0. Sonar PR analysis: 0 new (gate passed, 100% cov). Gitar: 4 findings (1 bug, 1 security, 1 perf, 1 quality-resolved)** | **Sonar: 5 new (gate PASSED, non-blocking); Gitar: 1 (quality)** | | |
+| Regressions or test failures (stage caught) | **None in tests** (15/15) — but Gitar found a latent **memory-leak bug** tests didn't cover | **None** (CI green) | | |
+| Escaped issues at end | **2 real issues escaped self-verify, caught only by Gitar: (a) memory leak on note delete, (b) download missing `nosniff`. Loop 1 ended at self-verify, so neither was fixed.** | **Security: 0 escaped (1 partial). Gitar test-quality finding left unaddressed.** | | |
 | Task B correctness: acceptance test passes? (Y/N) | n/a | n/a | | |
 | Human-attention events | **1 (agent paused to ask before committing/opening PR — deviated from "don't ask")** | **0 (confirmed — fully autonomous)** | | |
-| Rough effort (qualitative) | **TDD + single self-verify pass; PR pending** | **Single pass, ~minutes (PR 15:07 → Sonar 15:09 → Gitar 15:11)** | | |
+| Rough effort (qualitative) | **TDD + single self-verify pass (PR #6)** | **Single pass, ~minutes (PR 15:07 → Sonar 15:09 → Gitar 15:11)** | | |
 
 ## A2 — detailed log (Task A feature, Loop 2 post-PR)
 
@@ -84,18 +84,58 @@ same feature; in-memory storage; multer with a **10 MB** cap + single-file limit
 `:name` used only as a Map key (no path built → no traversal surface); 404 on
 missing note; 400 on missing/malformed file. 8 new attachment tests.
 
-**Status:** changes were staged but the agent **paused to ask** before committing /
-opening the PR (the 1 human-attention event). PR pending → once opened, capture
-Gitar + Sonar PR analysis and score the pitfall checklist, same as A2.
+**PR #6** `feat(notes): add file attachments to notes` — 1 commit (`94fc6db`),
+300+/2−, base `main`. Checks all green (Gitar "pass" check, Sonar gate passed).
 
-**Emerging cross-loop observation (Task A):**
-- Both loops produced a **clean, secure first cut** — strong evidence the **Guide
-  (`CLAUDE.md`) does most of the heavy lifting**, independent of loop shape.
-- Key expected divergence: Loop 1's self-verify is **deterministic** SonarQube
-  analysis, which by nature **cannot catch the semantic/LLM-review class of issue**
-  Gitar caught in A2 (the misleading path-traversal test). But Gitar still reviews
-  the A1 PR too — so the real question is whether pre-PR self-verify *reduced* what
-  the post-PR reviewers find. Confirm once the A1 PR is reviewed.
+**Pitfall checklist (scored against the final implementation):**
+1. Path traversal on write — **PASS** (in-memory; `:name` used only as a Map key).
+2. Path traversal on read — **PASS** (in-memory lookup; no path built).
+3. File size limit — **PASS** (multer per-file cap + single file).
+4. Content-type validation / safe serving — **FAIL**: allowlist check exists, but
+   the download handler sets only `Content-Type` + `Content-Length` — **no
+   `nosniff`, no `Content-Disposition`** (A2 had both). Client-declared MIME is
+   echoed back → MIME-sniffing / content-injection vector. (Gitar finding.)
+5. Note existence check — **PASS** (404 on missing note).
+6. Error disclosure — **PASS** (generic messages).
+Plus a **correctness bug** outside the original checklist: `delete(id)` removes
+the note but not its entry in the separate `attachments` map → **memory leak** on
+every delete of a note with uploads. (Gitar finding, confirmed in code.)
+
+**What each stage caught:**
+- **Pre-PR self-verify (`analyze_code_snippet`, deterministic): 0 issues** — gave
+  false confidence. Missed both the memory-leak bug and the missing security header.
+- **SonarCloud PR analysis (deterministic): 0 new issues**, gate passed, 100% cov —
+  agreed with the self-verify (these issues are beyond rule-based analysis).
+- **Gitar (post-PR, semantic LLM review): 4 findings** — ⚠️ memory-leak bug,
+  💡 missing `nosniff`, 💡 unbounded-storage DoS (design-level), and a resolved
+  `Content-Disposition` encoding nit. Caught what neither deterministic stage did.
+
+**Key finding (the important one for the company setup):**
+- A1's **deterministic pre-commit self-verify said "clean" but the code had a real
+  bug + a security gap.** Deterministic analysis (Sonar, whether pre-PR or post-PR)
+  is **necessary but not sufficient** — the **semantic LLM review (Gitar) is what
+  caught the bug and the missing header**. The strongest setup is **layered**:
+  deterministic self-verify *and* AI review, not one instead of the other.
+- Our **Loop 1 as defined stops at self-verify** (it doesn't react to post-PR
+  review), so these two issues **escaped unfixed**. Real AC/DC should be
+  *self-verify to reduce noise, then still review* — a refinement for the setup.
+
+**Caveat — agent-to-agent variance:** A1 and A2 are independent generations and
+differ materially (A2's download had `nosniff` + `Content-Disposition` and stored
+attachments on the note object → no leak; A1 lacked the header and used a separate
+map → leak). So the A1↔A2 delta is partly *which implementation the agent happened
+to produce*, not purely loop shape. The robust, loop-independent lesson still holds:
+deterministic self-verify missed issues the semantic review caught.
+
+## Comparison summary
+- **Loop 1 vs Loop 2 on Task A:** Both first cuts were shaped by the Guide, but
+  neither loop's *deterministic* checks (self-verify in A1, Sonar PR analysis in
+  both) caught the semantic bugs/security gaps — **Gitar's LLM review did, in both
+  runs.** A1 (self-verify only) left a real bug + security gap unfixed because Loop
+  1 stops before post-PR review. **Takeaway: layer deterministic + AI review;
+  don't treat pre-commit self-verify as a replacement for review.** (n=1 per cell;
+  agent-variance caveat above.)
+- **Loop 1 vs Loop 2 on Task B:** pending B1/B2.
 
 ## Comparison summary
 - Loop 1 vs Loop 2 on Task A: *A1 pre-PR self-verify clean (0 rework); both loops'
