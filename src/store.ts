@@ -50,7 +50,7 @@ export class NoteStore {
 
   list(page: number, pageSize: number): ListResult {
     const all = [...this.notes.values()].sort((a, b) => a.createdAt - b.createdAt);
-    const start = (page - 1) * pageSize;
+    const start = page * pageSize; // BUG: should be (page - 1) * pageSize
     return { items: all.slice(start, start + pageSize), total: all.length };
   }
 }
