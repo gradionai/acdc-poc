@@ -16,7 +16,7 @@ fairness note.
 | Regressions or test failures (stage caught) | | **None** (CI green) | | |
 | Escaped issues at end | | **Security: 0 escaped (1 partial). Gitar test-quality finding left unaddressed.** | | |
 | Task B correctness: acceptance test passes? (Y/N) | n/a | n/a | | |
-| Human-attention events | | **0 during run (confirm)** | | |
+| Human-attention events | | **0 (confirmed — fully autonomous)** | | |
 | Rough effort (qualitative) | | **Single pass, ~minutes (PR 15:07 → Sonar 15:09 → Gitar 15:11)** | | |
 
 ## A2 — detailed log (Task A feature, Loop 2 post-PR)
@@ -53,14 +53,17 @@ base `main`. Checks: GitGuardian ✓, **SonarCloud ✓ (quality gate passed)**,
 - The agent's *first cut* was already secure (0 security pitfalls escaped), almost
   certainly because `CLAUDE.md` (the Guide) spelled out the security expectations.
   So there was little for post-PR review to catch on security.
-- Because the "green" bar (gate pass + no Medium+ + tests green) was met on the
-  first commit, **the Loop 2 review-reaction loop barely engaged** — Gitar's
-  non-blocking suggestion was left unaddressed and there were 0 rework cycles.
-- Open questions to confirm with the operator:
-  1. Did the fresh session actually *wait for and read* the Gitar/Sonar reviews,
-     or open the PR and stop once locally green? (Affects whether "0 rework" means
-     "nothing to fix" vs "loop not run.")
-  2. Any human-attention events during the run?
+- **Confirmed by the operator:** the agent *did* wait for and read the Gitar +
+  Sonar reviews before finishing, and there was **no human intervention** (fully
+  autonomous). So the Loop 2 reaction loop genuinely engaged — "0 rework" reflects
+  a deliberate judgment that nothing required a fix under the green bar, not a
+  loop that never ran.
+- Notable nuance: Gitar surfaced a **real (non-blocking) test-quality issue that
+  the agent chose not to fix** because the green bar (gate pass + no Medium+ +
+  tests green) was already met. Whether to count this as an "escaped issue"
+  depends on how strictly we score non-blocking suggestions — flag for the
+  cross-loop comparison and the findings writeup. It also suggests the green bar
+  may want to include "address or explicitly dismiss reviewer findings."
 
 ## Comparison summary
 - Loop 1 vs Loop 2 on Task A: *pending A1.*
