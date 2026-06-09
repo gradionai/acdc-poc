@@ -18,6 +18,7 @@ jobs:
       - uses: actions/setup-node@v4
         with: { node-version: 22, cache: npm }
       - run: npm ci
+      - run: npm run lint
       - run: npm run test:cov --workspace server
       - run: npm run test:cov --workspace web
       - run: npm run build

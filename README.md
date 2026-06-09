@@ -47,7 +47,7 @@ acdc-poc/
 
 **Prod flow:** `npm run build` compiles both workspaces; `npm run start --workspace server` starts Express, which serves `web/dist` as static files with an API-excluding history fallback for client-side routing.
 
-**CI:** GitHub Actions runs lint → typecheck → server coverage → web coverage → build → Playwright e2e (video artifact + PR comment) → SonarCloud quality gate.
+**CI:** GitHub Actions runs lint → server coverage → web coverage → build (typechecks both workspaces) → Playwright e2e (video artifact + PR comment) → SonarCloud quality gate. A separate workflow enforces Conventional Commits.
 
 **E2e proof-of-work:** Every feature PR must include a passing Playwright test and link its recorded video from the CI artifact.
 
