@@ -28,7 +28,9 @@ Phase 2 depends on Phase 1; building the foundation first de-risks it.
 - **Structure:** light **monorepo via npm workspaces** (`server/`, `web/`, `e2e/`).
 - **License:** **Apache-2.0** (copyright holder: "Gradion" — confirm legal name).
 - **Task management:** GitHub **Project (v2) board + agent-ready issue templates +
-  seeded backlog + GitHub Actions automation** (full automation).
+  seeded backlog + board automation** — automated issue/PR→board routing on top of
+  a board that is bootstrapped once by an operator (not "fully" hands-off; see the
+  build/operator split and the token fallback in Prereq #1).
 - **Spec/plan docs** live on `experiment-control` (process docs), NOT in the
   shipped template on `main`.
 
@@ -60,7 +62,7 @@ Phase 2 depends on Phase 1; building the foundation first de-risks it.
 │   ├── src/  test/  package.json  tsconfig.json
 ├── web/               # React + Vite + TS SPA
 │   ├── src/  index.html  package.json  vite.config.ts  tsconfig.json
-├── e2e/               # Playwright tests + config + recorded media
+├── e2e/               # Playwright tests + config (recorded media = gitignored artifacts)
 │   ├── tests/  playwright.config.ts  package.json
 ├── .github/           # workflows, ISSUE_TEMPLATE/, PR template, CODEOWNERS, dependabot.yml
 ├── package.json       # workspaces: ["server","web","e2e"] + orchestration scripts
@@ -75,6 +77,11 @@ Phase 2 depends on Phase 1; building the foundation first de-risks it.
 - **Dev:** `npm run dev` runs Vite (proxying `/api` → Express) + Express together.
 - **Prod/CI:** `npm run build` builds the SPA to `web/dist`; **Express serves it
   statically** with SPA fallback to `index.html`. One server, one URL.
+  **Route precedence contract:** the `/api` router mounts **first**; the static +
+  history-fallback middleware mounts **after** and the fallback **must exclude
+  `/api/*`** (so the SPA catch-all never shadows the API). The server resolves the
+  SPA build via a path relative to `server/` (e.g. `../web/dist`), guarded so a
+  missing build yields a clear error rather than a silent 404.
 
 **e2e serving:** `playwright.config.ts` `webServer` builds the SPA + boots Express,
 `baseURL` points at it — Playwright drives the **real browser against the real
@@ -100,7 +107,7 @@ app**, so recorded video is genuine proof, not mocked.
 | .github/ISSUE_TEMPLATE/{bug_report,feature_request,agent_task}.yml + config.yml | Issue templates incl. the agent task spec |
 | .github/PULL_REQUEST_TEMPLATE.md | Checklist: linked issue, tests, proof-of-work video link |
 | .github/CODEOWNERS | Default ownership/reviewers |
-| .github/dependabot.yml | npm + GitHub Actions updates (formalized) |
+| .github/dependabot.yml | npm + GitHub Actions updates (net-new committed file; Dependabot is currently enabled via defaults, no committed config yet) |
 | .editorconfig, .gitattributes | Consistent formatting/line endings |
 | ESLint + Prettier + commitlint configs | Tooling-as-policy (enforced in CI) |
 
@@ -122,8 +129,9 @@ attached to the PR), affected area, and Definition of Done (tests pass, Sonar ga
 green, all review findings resolved).
 
 **Seeded backlog (~6 `agent_task` tickets)** for Phase 2 agents: edit-note,
-search/filter, tags, attachments upload/download UI, pin/favorite, pagination
-controls.
+search/filter, tags, attachments upload/download UI, pin/favorite, and
+pagination **controls** (next/prev UI — distinct from the base paginated list,
+which already ships in the seed).
 
 **Automation:**
 - GitHub **Projects v2 built-in workflows**: item-added → Todo; PR linked & opened
@@ -143,10 +151,16 @@ the plan).
 - `use: { video: 'on', trace: 'on', screenshot: 'only-on-failure', baseURL }` —
   video on every run (passing included) = genuine proof-of-work.
 - Chromium only; HTML reporter; dedicated `outputDir`.
-- CI uploads `playwright-report/` + `test-results/` (videos + traces) as artifacts
-  and **comments the report/artifact link on the PR**.
+- **`webServer`:** runs a dedicated `npm run start:prod` (builds the SPA then boots
+  Express serving `web/dist`) and waits on its `url` (e.g. `http://localhost:3000`);
+  `reuseExistingServer: !process.env.CI` (reuse a running dev server locally, always
+  fresh in CI).
+- **Generated media are artifacts, not committed:** `e2e/test-results/` and
+  `e2e/playwright-report/` are **gitignored**. CI uploads them as workflow artifacts
+  and **comments the report/artifact link on the PR** (even on failure). Nothing
+  under `e2e/` holds checked-in videos — durable storage is explicitly out of scope.
 - Convention documented in PR template + CONTRIBUTING: every feature PR carries a
-  passing e2e and its recorded video.
+  passing e2e and its recorded video (via the artifact link).
 
 ## Quality wiring & migration
 
@@ -154,11 +168,22 @@ the plan).
   `server/package.json`+`tsconfig.json`; add `web/` and `e2e/` workspaces; root
   `package.json` with workspaces + scripts (`dev`, `build`, `test`, `test:e2e`,
   `lint`). Re-point API routes to `/api/*` and update supertest tests.
+- **TypeScript strategy:** a root `tsconfig.base.json` holds shared strict options;
+  each workspace extends it. `server/` keeps the current ESM/NodeNext-style config
+  (it already emits runnable ESM with `.js` import specifiers); `web/` uses Vite's
+  bundler module resolution + JSX. No project-references requirement — each
+  workspace typechecks independently via its own `tsconfig`.
 - **SonarQube:** `sonar.sources=server/src,web/src`;
   `sonar.javascript.lcov.reportPaths=server/coverage/lcov.info,web/coverage/lcov.info`;
   exclude `e2e/` + config; same project key/org so the gate stays comparable.
-- **CI (one workflow):** `npm ci` → lint/typecheck → server tests (cov) → web tests
-  (cov) → build SPA → Playwright e2e (artifacts + PR comment) → Sonar scan.
+  Each workspace's Vitest config **must emit its lcov into its own
+  `<workspace>/coverage/` dir** (not a shared root `coverage/`), and the Sonar scan
+  must run **after both** coverage steps — otherwise coverage merges to ~0 and the
+  gate passes vacuously.
+- **CI (one workflow, ordered):** `npm ci` → lint/typecheck → server tests (cov) →
+  web tests (cov) → build SPA → Playwright e2e (upload artifacts; comment the
+  report link on the PR **even on failure**) → Sonar scan (strictly after both
+  coverage steps exist).
 - **ESLint + Prettier** (shared root config) + **commitlint** (Conventional Commits).
 - Tag **`v0.1.0`** + CHANGELOG entry when Phase 1 lands.
 
@@ -166,12 +191,40 @@ the plan).
 1. **Projects v2 token scope (biggest setup unknown):** the current `gh` token lacks
    `project` scope; need `gh auth refresh -s project,read:project` and a
    **`PROJECTS_TOKEN`** PAT secret for the Actions workflow (default `GITHUB_TOKEN`
-   cannot write user/org Projects). Confirm org permissions allow it.
+   cannot write user/org Projects). Confirm org permissions allow a PAT with
+   `project` scope.
+   **Fallback (if org policy forbids the PAT):** use only the Projects v2 *built-in*
+   workflows (configured in the board UI) plus manual "add to project," and drop the
+   `actions/add-to-project` workflow. The durable foundation (Steps 1–4 of the plan)
+   must not depend on this, so a token failure can't block Phase 1 — only the board
+   auto-routing is affected.
 2. **SonarQube monorepo config:** verify coverage from two workspaces is merged
    correctly and the gate stays meaningful after the restructure.
-3. **`main` churn:** this is a large, deliberate `main` change. Prior PoC run
-   branches (`run/*`) and PRs #5–8 should be closed/cleaned (folded into the plan).
+3. **`main` churn:** this is a large, deliberate `main` change. Cleanup checklist
+   (folded into the plan): close PRs #5–8, delete the `run/*` local+remote branches
+   and the `pr1`–`pr8` local refs, and resolve/close the `dependabot/*` remote
+   branch. The `experiment-control` branch and `baseline`/`task-b-bugged` tags are
+   intentionally kept.
 4. **Copyright legal name** for LICENSE/NOTICE — defaulting to "Gradion".
+5. **SPDX headers:** decision deferred to the plan — default **no** per-file SPDX
+   headers for Phase 1 (LICENSE+NOTICE suffice for a minimal template); revisit if
+   the company standard requires them.
+6. **Package version:** keep `package.json` at `0.1.0` (re-baselining the template)
+   and add a `v0.1.0` git tag when Phase 1 lands; no version bump needed.
+
+## Implementation phasing (guidance for the plan)
+
+This is one coherent spec, but the plan should sequence it so a token/setup failure
+late in the process can't block the durable foundation:
+1. **Monorepo restructure** (`server/` move, root workspaces, `/api/*` routes,
+   updated supertest tests) → green `server` tests + Sonar.
+2. **Web SPA** (React+Vite, dev proxy, Express-serves-SPA with the precedence
+   contract) + minimal web test.
+3. **Playwright e2e** (happy path, video/trace, `start:prod` webServer) + CI
+   artifacts + PR comment.
+4. **OSS hygiene** files + ESLint/Prettier/commitlint + README badges.
+5. **GitHub board/labels/templates/seeded issues + automation** — **last**, since
+   it's operator- and token-gated (see Prereq #1 fallback).
 
 ## Deliverables
 - Restructured monorepo on `main`: `server/` + `web/` + `e2e/`, all green
