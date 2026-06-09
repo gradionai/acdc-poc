@@ -11,13 +11,13 @@ fairness note.
 
 | Metric | A1 | A2 | B1 | B2 |
 |--------|----|----|----|----|
-| Rework cycles (Verify→Solve iterations before green) | | **0** | | |
-| Issues caught — count & stage | | **Sonar: 5 new (gate PASSED, non-blocking); Gitar: 1 (quality)** | | |
-| Regressions or test failures (stage caught) | | **None** (CI green) | | |
-| Escaped issues at end | | **Security: 0 escaped (1 partial). Gitar test-quality finding left unaddressed.** | | |
+| Rework cycles (Verify→Solve iterations before green) | **0** (self-verify found 0 issues on 1st pass) | **0** | | |
+| Issues caught — count & stage | **Pre-PR self-verify (`analyze_code_snippet`): 0 on changed code (2 pre-existing MINOR in untouched code, out of scope). PR-Sonar/Gitar: pending PR** | **Sonar: 5 new (gate PASSED, non-blocking); Gitar: 1 (quality)** | | |
+| Regressions or test failures (stage caught) | **None** (15/15, CI green) | **None** (CI green) | | |
+| Escaped issues at end | **pending PR + checklist scoring** | **Security: 0 escaped (1 partial). Gitar test-quality finding left unaddressed.** | | |
 | Task B correctness: acceptance test passes? (Y/N) | n/a | n/a | | |
-| Human-attention events | | **0 (confirmed — fully autonomous)** | | |
-| Rough effort (qualitative) | | **Single pass, ~minutes (PR 15:07 → Sonar 15:09 → Gitar 15:11)** | | |
+| Human-attention events | **1 (agent paused to ask before committing/opening PR — deviated from "don't ask")** | **0 (confirmed — fully autonomous)** | | |
+| Rough effort (qualitative) | **TDD + single self-verify pass; PR pending** | **Single pass, ~minutes (PR 15:07 → Sonar 15:09 → Gitar 15:11)** | | |
 
 ## A2 — detailed log (Task A feature, Loop 2 post-PR)
 
@@ -65,6 +65,39 @@ base `main`. Checks: GitGuardian ✓, **SonarCloud ✓ (quality gate passed)**,
   cross-loop comparison and the findings writeup. It also suggests the green bar
   may want to include "address or explicitly dismiss reviewer findings."
 
+## A1 — detailed log (Task A feature, Loop 1 pre-commit self-verify)
+
+**Fidelity caveat:** Loop 1 self-verified with `analyze_code_snippet` (snippet-level
+deterministic SonarQube analysis), not the CI-context `run_advanced_code_analysis`,
+because the Agentic Analysis add-on is not in the Team trial. The Loop 1 *concept*
+(pre-commit SonarQube self-verify) holds; precision is snippet-level.
+
+**Self-verify result (from the session — not visible on GitHub):**
+- The agent ran `analyze_code_snippet` on its changed files and got **0 issues on
+  changed code** on the first pass → **0 rework cycles**. (Only 2 pre-existing
+  MINOR issues remained in the untouched `update` method — below the Medium+ bar,
+  out of scope.)
+- 15/15 tests pass; `tsc --noEmit` clean; coverage on changed code ~100%.
+
+**Implementation (per the agent's summary; to be verified against the PR diff):**
+same feature; in-memory storage; multer with a **10 MB** cap + single-file limit;
+`:name` used only as a Map key (no path built → no traversal surface); 404 on
+missing note; 400 on missing/malformed file. 8 new attachment tests.
+
+**Status:** changes were staged but the agent **paused to ask** before committing /
+opening the PR (the 1 human-attention event). PR pending → once opened, capture
+Gitar + Sonar PR analysis and score the pitfall checklist, same as A2.
+
+**Emerging cross-loop observation (Task A):**
+- Both loops produced a **clean, secure first cut** — strong evidence the **Guide
+  (`CLAUDE.md`) does most of the heavy lifting**, independent of loop shape.
+- Key expected divergence: Loop 1's self-verify is **deterministic** SonarQube
+  analysis, which by nature **cannot catch the semantic/LLM-review class of issue**
+  Gitar caught in A2 (the misleading path-traversal test). But Gitar still reviews
+  the A1 PR too — so the real question is whether pre-PR self-verify *reduced* what
+  the post-PR reviewers find. Confirm once the A1 PR is reviewed.
+
 ## Comparison summary
-- Loop 1 vs Loop 2 on Task A: *pending A1.*
+- Loop 1 vs Loop 2 on Task A: *A1 pre-PR self-verify clean (0 rework); both loops'
+  first cut secure. Awaiting A1 PR review to complete the comparison.*
 - Loop 1 vs Loop 2 on Task B: *pending B1/B2.*
