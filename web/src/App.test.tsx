@@ -29,6 +29,23 @@ function mockFetchSequence() {
         notes.push(n);
         return new Response(JSON.stringify(n), { status: 201 });
       }
+      if (init?.method === 'PUT') {
+        const id = (url as string).split('/').pop();
+        const b = JSON.parse(String(init.body)) as { title?: string; body?: string };
+        notes = notes.map((n) =>
+          n.id === id
+            ? {
+                ...n,
+                ...(b.title !== undefined ? { title: b.title } : {}),
+                ...(b.body !== undefined ? { body: b.body } : {}),
+              }
+            : n,
+        );
+        const updated = notes.find((n) => n.id === id);
+        return updated
+          ? new Response(JSON.stringify(updated), { status: 200 })
+          : new Response(JSON.stringify({ error: 'not found' }), { status: 404 });
+      }
       if (init?.method === 'DELETE') {
         const id = (url as string).split('/').pop();
         notes = notes.filter((n) => n.id !== id);
@@ -63,6 +80,50 @@ describe('App', () => {
 
     await userEvent.click(screen.getByRole('button', { name: /delete/i }));
     await waitFor(() => expect(screen.queryByText('Temp note')).not.toBeInTheDocument());
+  });
+
+  it('edits a note and shows the updated text in the list', async () => {
+    render(<App />);
+    await userEvent.type(screen.getByLabelText(/^title$/i), 'Original title');
+    await userEvent.type(screen.getByLabelText(/^body$/i), 'Original body');
+    await userEvent.click(screen.getByRole('button', { name: /add note/i }));
+    await waitFor(() => expect(screen.getByText('Original title')).toBeInTheDocument());
+
+    // Click Edit to open inline form
+    await userEvent.click(screen.getByRole('button', { name: /edit/i }));
+
+    // Clear and type new values
+    const editTitleInput = screen.getByRole('textbox', { name: /edit title/i });
+    await userEvent.clear(editTitleInput);
+    await userEvent.type(editTitleInput, 'Updated title');
+
+    const editBodyInput = screen.getByRole('textbox', { name: /edit body/i });
+    await userEvent.clear(editBodyInput);
+    await userEvent.type(editBodyInput, 'Updated body');
+
+    await userEvent.click(screen.getByRole('button', { name: /save/i }));
+
+    await waitFor(() => expect(screen.getByText('Updated title')).toBeInTheDocument());
+    expect(screen.queryByText('Original title')).not.toBeInTheDocument();
+  });
+
+  it('does not save when edit title or body is cleared to whitespace', async () => {
+    render(<App />);
+    await userEvent.type(screen.getByLabelText(/^title$/i), 'Keep me');
+    await userEvent.type(screen.getByLabelText(/^body$/i), 'Keep body');
+    await userEvent.click(screen.getByRole('button', { name: /add note/i }));
+    await waitFor(() => expect(screen.getByText('Keep me')).toBeInTheDocument());
+
+    // Open edit form and clear the title field
+    await userEvent.click(screen.getByRole('button', { name: /edit/i }));
+    const editTitleInput = screen.getByRole('textbox', { name: /edit title/i });
+    await userEvent.clear(editTitleInput);
+
+    // Clicking Save should be a no-op — note stays in the list unchanged
+    await userEvent.click(screen.getByRole('button', { name: /save/i }));
+
+    // Edit form should still be visible (save was suppressed)
+    expect(screen.getByRole('textbox', { name: /edit title/i })).toBeInTheDocument();
   });
 
   it('shows an error when loading notes fails', async () => {

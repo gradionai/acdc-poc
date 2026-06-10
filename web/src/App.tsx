@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState, type FormEvent } from 'react';
-import { createNote, deleteNote, listNotes, type Note } from './api';
+import { createNote, deleteNote, listNotes, updateNote, type Note } from './api';
 
 const PAGE_SIZE = 5;
 
@@ -10,6 +10,9 @@ export function App() {
   const [error, setError] = useState<string | null>(null);
   const [page, setPage] = useState(1);
   const [total, setTotal] = useState(0);
+  const [editingId, setEditingId] = useState<string | null>(null);
+  const [editTitle, setEditTitle] = useState('');
+  const [editBody, setEditBody] = useState('');
 
   // Monotonically increasing counter; each refresh call captures its own id
   // and only applies its result if no newer request has been issued since.
@@ -57,6 +60,32 @@ export function App() {
     }
   }
 
+  function onEditStart(note: Note) {
+    setEditingId(note.id);
+    setEditTitle(note.title);
+    setEditBody(note.body);
+  }
+
+  function onEditCancel() {
+    setEditingId(null);
+    setEditTitle('');
+    setEditBody('');
+  }
+
+  async function onEditSave(id: string) {
+    if (!editTitle.trim() || !editBody.trim()) return;
+    try {
+      await updateNote(id, { title: editTitle, body: editBody });
+      setEditingId(null);
+      setEditTitle('');
+      setEditBody('');
+      setError(null);
+      await refresh(page);
+    } catch (e) {
+      setError(String(e));
+    }
+  }
+
   async function onDelete(id: string) {
     try {
       await deleteNote(id);
@@ -91,12 +120,36 @@ export function App() {
         <button type="submit">Add note</button>
       </form>
       <ul>
-        {notes.map((n) => (
-          <li key={n.id}>
-            <strong>{n.title}</strong>: {n.body}
-            <button onClick={() => void onDelete(n.id)}>Delete</button>
-          </li>
-        ))}
+        {notes.map((n) =>
+          editingId === n.id ? (
+            <li key={n.id}>
+              <label>
+                Edit title
+                <input
+                  aria-label="Edit title"
+                  value={editTitle}
+                  onChange={(e) => setEditTitle(e.target.value)}
+                />
+              </label>
+              <label>
+                Edit body
+                <textarea
+                  aria-label="Edit body"
+                  value={editBody}
+                  onChange={(e) => setEditBody(e.target.value)}
+                />
+              </label>
+              <button onClick={() => void onEditSave(n.id)}>Save</button>
+              <button onClick={onEditCancel}>Cancel</button>
+            </li>
+          ) : (
+            <li key={n.id}>
+              <strong>{n.title}</strong>: {n.body}
+              <button onClick={() => onEditStart(n)}>Edit</button>
+              <button onClick={() => void onDelete(n.id)}>Delete</button>
+            </li>
+          ),
+        )}
       </ul>
       <nav aria-label="Pagination">
         <button
