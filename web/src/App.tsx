@@ -1,22 +1,39 @@
-import { useEffect, useState, type FormEvent } from 'react';
+import { useEffect, useRef, useState, type FormEvent } from 'react';
 import { createNote, deleteNote, listNotes, type Note } from './api';
+
+const PAGE_SIZE = 5;
 
 export function App() {
   const [notes, setNotes] = useState<Note[]>([]);
   const [title, setTitle] = useState('');
   const [body, setBody] = useState('');
   const [error, setError] = useState<string | null>(null);
+  const [page, setPage] = useState(1);
+  const [total, setTotal] = useState(0);
 
-  async function refresh() {
+  // Monotonically increasing counter; each refresh call captures its own id
+  // and only applies its result if no newer request has been issued since.
+  const reqSeqRef = useRef(0);
+
+  const totalPages = Math.max(1, Math.ceil(total / PAGE_SIZE));
+
+  async function refresh(p = page) {
+    const seq = ++reqSeqRef.current;
     try {
-      setNotes(await listNotes());
+      const result = await listNotes(p, PAGE_SIZE);
+      if (seq !== reqSeqRef.current) return; // stale — a newer request is in flight
+      setNotes(result.notes);
+      setTotal(result.total);
     } catch (e) {
+      if (seq !== reqSeqRef.current) return;
       setError(String(e));
     }
   }
+
   useEffect(() => {
-    void refresh();
-  }, []);
+    void refresh(page);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [page]);
 
   async function onSubmit(e: FormEvent) {
     e.preventDefault();
@@ -26,7 +43,15 @@ export function App() {
       setTitle('');
       setBody('');
       setError(null);
-      await refresh();
+      // New note is appended at the end (oldest-first ordering).
+      // Navigate to the last page so it is immediately visible.
+      const newTotal = total + 1;
+      const lastPage = Math.max(1, Math.ceil(newTotal / PAGE_SIZE));
+      if (page === lastPage) {
+        await refresh(lastPage);
+      } else {
+        setPage(lastPage);
+      }
     } catch (e) {
       setError(String(e));
     }
@@ -36,7 +61,15 @@ export function App() {
     try {
       await deleteNote(id);
       setError(null);
-      await refresh();
+      // After deletion the current page may become empty; go back one if needed
+      const newTotal = total - 1;
+      const newTotalPages = Math.max(1, Math.ceil(newTotal / PAGE_SIZE));
+      const newPage = Math.min(page, newTotalPages);
+      if (newPage === page) {
+        await refresh(page);
+      } else {
+        setPage(newPage);
+      }
     } catch (e) {
       setError(String(e));
     }
@@ -65,6 +98,25 @@ export function App() {
           </li>
         ))}
       </ul>
+      <nav aria-label="Pagination">
+        <button
+          onClick={() => setPage((p) => p - 1)}
+          disabled={page <= 1}
+          aria-label="Previous page"
+        >
+          Previous
+        </button>
+        <span>
+          Page {page} of {totalPages}
+        </span>
+        <button
+          onClick={() => setPage((p) => p + 1)}
+          disabled={page >= totalPages}
+          aria-label="Next page"
+        >
+          Next
+        </button>
+      </nav>
     </main>
   );
 }
