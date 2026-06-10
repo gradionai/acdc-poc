@@ -20,6 +20,10 @@ export function App() {
   // Monotonically increasing counter; each refresh call captures its own id
   // and only applies its result if no newer request has been issued since.
   const reqSeqRef = useRef(0);
+  // Set to true when onSubmit clears the search programmatically so the
+  // debounce effect skips its `setPage(1)` reset (onSubmit controls the page
+  // directly in that case).
+  const skipDebouncePageResetRef = useRef(false);
 
   const totalPages = Math.max(1, Math.ceil(total / PAGE_SIZE));
 
@@ -43,9 +47,13 @@ export function App() {
 
   // Debounce search input: update `query` after SEARCH_DEBOUNCE_MS of inactivity.
   // Reset to page 1 whenever the query changes so results are always from the start.
+  // Skip the page reset when onSubmit has already positioned the page itself.
   useEffect(() => {
     const timer = setTimeout(() => {
-      setPage(1);
+      if (!skipDebouncePageResetRef.current) {
+        setPage(1);
+      }
+      skipDebouncePageResetRef.current = false;
       setQuery(searchInput);
     }, SEARCH_DEBOUNCE_MS);
     return () => clearTimeout(timer);
@@ -59,12 +67,25 @@ export function App() {
       setTitle('');
       setBody('');
       setError(null);
+      // If a search filter is active, clear it before navigating so the new
+      // note is always visible. With a filter active, `total` reflects only
+      // the filtered count; the new note may not match the query, so
+      // navigating to `lastPage` of the filtered results would not show it.
+      // Fetch the real (unfiltered) total to compute the correct last page.
+      const unfilteredTotal = query !== '' ? (await listNotes(1, 1, '')).total : total;
+      if (query !== '') {
+        // Signal the debounce effect to skip its setPage(1) reset; onSubmit
+        // will set the correct page directly after clearing the search.
+        skipDebouncePageResetRef.current = true;
+        setSearchInput('');
+        setQuery('');
+      }
       // New note is appended at the end (oldest-first ordering).
       // Navigate to the last page so it is immediately visible.
-      const newTotal = total + 1;
+      const newTotal = unfilteredTotal + 1;
       const lastPage = Math.max(1, Math.ceil(newTotal / PAGE_SIZE));
-      if (page === lastPage) {
-        await refresh(lastPage);
+      if (page === lastPage && query === '') {
+        await refresh(lastPage, '');
       } else {
         setPage(lastPage);
       }

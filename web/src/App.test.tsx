@@ -305,6 +305,41 @@ describe('App', () => {
     await userEvent.type(screen.getByRole('textbox', { name: /search notes/i }), 'zzznomatch');
     await waitFor(() => expect(screen.queryByText('Unique note')).not.toBeInTheDocument());
   });
+
+  it('creating a note while a search is active clears the search and shows the new note', async () => {
+    render(<App />);
+
+    // Create two notes so there is something to filter OUT, which lets us
+    // confirm the debounce has fired before submitting the new note.
+    await userEvent.type(screen.getByLabelText(/^title$/i), 'Alpha existing');
+    await userEvent.type(screen.getByLabelText(/^body$/i), 'alpha body');
+    await userEvent.click(screen.getByRole('button', { name: /add note/i }));
+    await waitFor(() => expect(screen.getByText('Alpha existing')).toBeInTheDocument());
+
+    await userEvent.type(screen.getByLabelText(/^title$/i), 'Beta existing');
+    await userEvent.type(screen.getByLabelText(/^body$/i), 'beta body');
+    await userEvent.click(screen.getByRole('button', { name: /add note/i }));
+    await waitFor(() => expect(screen.getByText('Beta existing')).toBeInTheDocument());
+
+    // Activate a search filter that excludes Beta.
+    // Wait for Beta to disappear from the list to confirm the debounce fired
+    // and `query` state is now set to 'Alpha'.
+    const searchBox = screen.getByRole('textbox', { name: /search notes/i });
+    await userEvent.type(searchBox, 'Alpha');
+    await waitFor(() => expect(screen.queryByText('Beta existing')).not.toBeInTheDocument());
+    expect(screen.getByText('Alpha existing')).toBeInTheDocument();
+
+    // Create a new note that does NOT match the active filter ('Alpha')
+    await userEvent.type(screen.getByLabelText(/^title$/i), 'Unrelated note');
+    await userEvent.type(screen.getByLabelText(/^body$/i), 'unrelated body');
+    await userEvent.click(screen.getByRole('button', { name: /add note/i }));
+
+    // The search should be cleared; both the new note and the previously
+    // filtered-out note should be visible again.
+    await waitFor(() => expect(screen.getByText('Unrelated note')).toBeInTheDocument());
+    await waitFor(() => expect(searchBox).toHaveValue(''));
+    expect(screen.getByText('Beta existing')).toBeInTheDocument();
+  });
 });
 
 describe('listNotes — X-Total-Count validation', () => {
