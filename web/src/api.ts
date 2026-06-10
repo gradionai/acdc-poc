@@ -4,12 +4,19 @@ export interface Note {
   body: string;
 }
 
+export interface NotesPage {
+  notes: Note[];
+  total: number;
+}
+
 const base = '/api/notes';
 
-export async function listNotes(): Promise<Note[]> {
-  const res = await fetch(base);
+export async function listNotes(page = 1, pageSize = 5): Promise<NotesPage> {
+  const res = await fetch(`${base}?page=${page}&pageSize=${pageSize}`);
   if (!res.ok) throw new Error('failed to load notes');
-  return res.json();
+  const total = Number(res.headers.get('X-Total-Count') ?? '0');
+  const notes = (await res.json()) as Note[];
+  return { notes, total };
 }
 
 export async function createNote(input: { title: string; body: string }): Promise<Note> {
