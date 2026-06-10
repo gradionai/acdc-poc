@@ -14,7 +14,8 @@ const base = '/api/notes';
 export async function listNotes(page = 1, pageSize = 5): Promise<NotesPage> {
   const res = await fetch(`${base}?page=${page}&pageSize=${pageSize}`);
   if (!res.ok) throw new Error('failed to load notes');
-  const total = Number(res.headers.get('X-Total-Count') ?? '0');
+  const raw = Number(res.headers.get('X-Total-Count'));
+  const total = Number.isFinite(raw) && raw >= 0 ? raw : 0;
   const notes = (await res.json()) as Note[];
   return { notes, total };
 }

@@ -1,4 +1,4 @@
-import { useEffect, useState, type FormEvent } from 'react';
+import { useEffect, useRef, useState, type FormEvent } from 'react';
 import { createNote, deleteNote, listNotes, type Note } from './api';
 
 const PAGE_SIZE = 5;
@@ -11,14 +11,21 @@ export function App() {
   const [page, setPage] = useState(1);
   const [total, setTotal] = useState(0);
 
+  // Monotonically increasing counter; each refresh call captures its own id
+  // and only applies its result if no newer request has been issued since.
+  const reqSeqRef = useRef(0);
+
   const totalPages = Math.max(1, Math.ceil(total / PAGE_SIZE));
 
   async function refresh(p = page) {
+    const seq = ++reqSeqRef.current;
     try {
       const result = await listNotes(p, PAGE_SIZE);
+      if (seq !== reqSeqRef.current) return; // stale — a newer request is in flight
       setNotes(result.notes);
       setTotal(result.total);
     } catch (e) {
+      if (seq !== reqSeqRef.current) return;
       setError(String(e));
     }
   }
@@ -36,11 +43,14 @@ export function App() {
       setTitle('');
       setBody('');
       setError(null);
-      // After creating, go to page 1 (or refresh current page)
-      if (page === 1) {
-        await refresh(1);
+      // New note is appended at the end (oldest-first ordering).
+      // Navigate to the last page so it is immediately visible.
+      const newTotal = total + 1;
+      const lastPage = Math.max(1, Math.ceil(newTotal / PAGE_SIZE));
+      if (page === lastPage) {
+        await refresh(lastPage);
       } else {
-        setPage(1);
+        setPage(lastPage);
       }
     } catch (e) {
       setError(String(e));

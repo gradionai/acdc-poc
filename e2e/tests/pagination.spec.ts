@@ -25,20 +25,30 @@ test('pagination: next/prev controls work across multiple pages', async ({ page 
   // Seed 6 notes so we have 2 pages (pageSize = 5)
   const titles = await seedNotes(page, 6);
 
-  // After creating 6 notes the UI resets to page 1.
-  // The oldest 5 notes should appear on page 1, newest on page 2.
-  // Check page 1: Previous disabled, Next enabled
+  // After creating the 6th note the app navigates to the LAST page so the
+  // new note is immediately visible (oldest-first server ordering).
+  // With pageSize=5 and 6 notes, page 2 is the last page.
   const prevBtn = page.getByRole('button', { name: /previous page/i });
   const nextBtn = page.getByRole('button', { name: /next page/i });
 
-  await expect(prevBtn).toBeDisabled();
-  await expect(nextBtn).toBeEnabled();
+  // We should be on page 2 (last page): Next disabled, Previous enabled
+  await expect(nextBtn).toBeDisabled();
+  await expect(prevBtn).toBeEnabled();
 
-  // Verify a note from page 1 is visible and the 6th (last created) is not
+  // The 6th (newest) note must be visible; the 1st (oldest) must not
+  await expect(page.getByRole('list')).toContainText(titles[5]);
+  await expect(page.getByRole('list')).not.toContainText(titles[0]);
+
+  // Navigate back to page 1
+  await prevBtn.click();
   await expect(page.getByRole('list')).toContainText(titles[0]);
   await expect(page.getByRole('list')).not.toContainText(titles[5]);
 
-  // Navigate forward to page 2
+  // On page 1: Previous disabled, Next enabled
+  await expect(prevBtn).toBeDisabled();
+  await expect(nextBtn).toBeEnabled();
+
+  // Navigate forward to page 2 again
   await nextBtn.click();
   await expect(page.getByRole('list')).toContainText(titles[5]);
   await expect(page.getByRole('list')).not.toContainText(titles[0]);
@@ -47,32 +57,33 @@ test('pagination: next/prev controls work across multiple pages', async ({ page 
   await expect(nextBtn).toBeDisabled();
   await expect(prevBtn).toBeEnabled();
 
-  // Navigate back to page 1
-  await prevBtn.click();
-  await expect(page.getByRole('list')).toContainText(titles[0]);
-  await expect(page.getByRole('list')).not.toContainText(titles[5]);
-
-  await expect(prevBtn).toBeDisabled();
-  await expect(nextBtn).toBeEnabled();
-
-  // Clean up: delete all seeded notes
-  for (const title of titles) {
-    // Navigate to the page containing this note if needed
-    let item = page.getByRole('listitem').filter({ hasText: title });
-    if (!(await item.isVisible())) {
-      // Try next page
-      if (await nextBtn.isEnabled()) {
-        await nextBtn.click();
-        item = page.getByRole('listitem').filter({ hasText: title });
-      } else {
-        // Try prev page
-        await prevBtn.click();
-        item = page.getByRole('listitem').filter({ hasText: title });
+  // Clean up: delete all seeded notes.
+  // Always go to page 1 first, then delete whatever is visible. Repeat until
+  // all seeded titles are gone. This is robust to page shifts after deletion.
+  const remaining = new Set(titles);
+  while (remaining.size > 0) {
+    // Go to page 1 to start from a known position
+    while (await prevBtn.isEnabled()) {
+      await prevBtn.click();
+    }
+    let deleted = false;
+    for (const title of [...remaining]) {
+      const item = page.getByRole('listitem').filter({ hasText: title });
+      if (await item.isVisible()) {
+        await item.getByRole('button', { name: /delete/i }).click();
+        await expect(item).toHaveCount(0);
+        remaining.delete(title);
+        deleted = true;
+        break; // restart the outer loop so page state is refreshed
       }
     }
-    if (await item.isVisible()) {
-      await item.getByRole('button', { name: /delete/i }).click();
-      await expect(item).toHaveCount(0);
+    if (!deleted) {
+      // All remaining notes must be on page 2+; advance one page and retry
+      if (await nextBtn.isEnabled()) {
+        await nextBtn.click();
+      } else {
+        break; // nothing left to delete
+      }
     }
   }
 });
