@@ -77,8 +77,8 @@ You are in a dedicated git worktree at <WORKTREE_PATH>, on branch
 1. `gh issue view <N>` — read the issue's acceptance criteria + scope.
 2. Read `CLAUDE.md` for project conventions and the security/quality bar.
 3. `npm ci` in the worktree (worktrees don't share node_modules), then
-   `npm exec --workspace e2e -- playwright install chromium` (the browser may not
-   be cached in this worktree/machine).
+   `npm exec --workspace e2e -- playwright install chromium` (no `--with-deps` —
+   that's a Linux/apt step CI uses; locally on macOS the browser binary is enough).
 4. Implement the feature within the stated scope. Follow CLAUDE.md.
 5. Add a Playwright e2e under `e2e/tests/` covering the feature (the config already
    records video — a passing e2e produces the proof-of-work artifact in CI).
@@ -245,10 +245,13 @@ gh pr checks $PR --repo gradionai/acdc-poc
 Expected: lint/tests/e2e/SonarCloud re-run on the pushed fixes.
 
 - [ ] **Step 3: Evaluate the gate**
-Read all checks: `gh pr checks $PR --repo gradionai/acdc-poc`. SonarCloud's quality
-gate surfaces as the **"SonarCloud Code Analysis"** check (confirmed in Phase 1 — it
-showed `fail` when new-code coverage dropped, `pass` when restored), and the
-pipeline check is **build-test-scan**; both plus **lint** must be `pass`.
+Read all checks: `gh pr checks $PR --repo gradionai/acdc-poc`. The relevant checks:
+- **build-test-scan** — the CI job; **eslint/prettier, build, tests, and e2e all run
+  inside it** (so code-lint failures appear here, not under a separate check).
+- **SonarCloud Code Analysis** — the quality gate (confirmed in Phase 1: `fail` when
+  new-code coverage dropped, `pass` when restored).
+- **lint** — this is the **commitlint** job (Conventional-Commit message check), not code lint.
+All three must be `pass`.
 Gate met when: **all those checks pass AND no unresolved blocking finding**
 (bug/security/Medium+, per the spec's normalization rule) remains. If not met and
 iterations < 3, re-capture findings and repeat Task 2.4 Step 1. If still not met
