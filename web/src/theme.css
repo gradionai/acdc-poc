@@ -144,3 +144,95 @@ nav[aria-label='Pagination'] {
   gap: 0.5rem;
   margin-top: 1rem;
 }
+
+/* Error banner */
+.error-banner {
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+  background-color: color-mix(in srgb, var(--color-alert) 15%, transparent);
+  border: 1px solid var(--color-alert);
+  border-radius: 4px;
+  color: var(--color-alert);
+  padding: 0.5rem 0.75rem;
+  margin-bottom: 1rem;
+}
+
+.error-banner span {
+  flex: 1;
+}
+
+.error-retry {
+  background-color: var(--color-alert);
+  color: #ffffff;
+  border-color: var(--color-alert);
+  white-space: nowrap;
+}
+
+.error-retry:hover:not(:disabled) {
+  background-color: var(--color-alert);
+  opacity: 0.85;
+  color: #ffffff;
+}
+
+/* Skeleton loading cards */
+@keyframes skeleton-pulse {
+  0%,
+  100% {
+    opacity: 1;
+  }
+  50% {
+    opacity: 0.4;
+  }
+}
+
+.skeleton-card {
+  display: flex;
+  flex-direction: column;
+  gap: 0.4rem;
+}
+
+.skeleton-line {
+  display: block;
+  background-color: var(--color-border);
+  border-radius: 4px;
+  animation: skeleton-pulse 1.4s ease-in-out infinite;
+}
+
+.skeleton-title {
+  height: 1rem;
+  width: 40%;
+}
+
+.skeleton-body {
+  height: 0.75rem;
+  width: 80%;
+}
+
+/* Empty state */
+.empty-state {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 0.75rem;
+  padding: 2rem 1rem;
+  color: var(--color-text-muted);
+  text-align: center;
+}
+
+.empty-state p {
+  margin: 0;
+  font-size: 1rem;
+}
+
+.empty-state-cta {
+  background-color: var(--color-primary);
+  color: #ffffff;
+  border-color: var(--color-primary);
+  padding: 0.5rem 1.25rem;
+}
+
+.empty-state-cta:hover:not(:disabled) {
+  background-color: var(--color-primary-hover);
+  color: #ffffff;
+}

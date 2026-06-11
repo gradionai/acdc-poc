@@ -52,6 +52,8 @@ export function App() {
   /** noteId → upload error string. */
   const [uploadError, setUploadError] = useState<Record<string, string | null>>({});
 
+  const [loading, setLoading] = useState(false);
+
   // Monotonically increasing counter; each refresh call captures its own id
   // and only applies its result if no newer request has been issued since.
   const reqSeqRef = useRef(0);
@@ -64,14 +66,19 @@ export function App() {
 
   async function refresh(p = page, q = query, tf = tagFilter) {
     const seq = ++reqSeqRef.current;
+    setLoading(true);
     try {
       const result = await listNotes(p, PAGE_SIZE, q, tf);
       if (seq !== reqSeqRef.current) return; // stale — a newer request is in flight
       setNotes(result.notes);
       setTotal(result.total);
+      setError(null);
     } catch (e) {
       if (seq !== reqSeqRef.current) return;
-      setError(String(e));
+      const msg = e instanceof Error ? e.message : String(e);
+      setError(msg);
+    } finally {
+      if (seq === reqSeqRef.current) setLoading(false);
     }
   }
 
@@ -126,7 +133,7 @@ export function App() {
         setPage(lastPage);
       }
     } catch (e) {
-      setError(String(e));
+      setError(e instanceof Error ? e.message : 'An unexpected error occurred');
     }
   }
 
@@ -155,7 +162,7 @@ export function App() {
       setError(null);
       await refresh(page);
     } catch (e) {
-      setError(String(e));
+      setError(e instanceof Error ? e.message : 'An unexpected error occurred');
     }
   }
 
@@ -170,7 +177,7 @@ export function App() {
       const metas = await listAttachments(id);
       setAttachments((prev) => ({ ...prev, [id]: metas }));
     } catch (e) {
-      setError(String(e));
+      setError(e instanceof Error ? e.message : 'An unexpected error occurred');
     }
   }
 
@@ -185,7 +192,10 @@ export function App() {
       const metas = await listAttachments(id);
       setAttachments((prev) => ({ ...prev, [id]: metas }));
     } catch (err) {
-      setUploadError((prev) => ({ ...prev, [id]: String(err) }));
+      setUploadError((prev) => ({
+        ...prev,
+        [id]: err instanceof Error ? err.message : 'An unexpected error occurred',
+      }));
     }
   }
 
@@ -207,7 +217,7 @@ export function App() {
         }
       }
     } catch (e) {
-      setError(String(e));
+      setError(e instanceof Error ? e.message : 'An unexpected error occurred');
     }
   }
 
@@ -225,7 +235,7 @@ export function App() {
         setPage(newPage);
       }
     } catch (e) {
-      setError(String(e));
+      setError(e instanceof Error ? e.message : 'An unexpected error occurred');
     }
   }
 
@@ -241,7 +251,14 @@ export function App() {
           {theme === 'dark' ? '☀️' : '🌙'}
         </button>
       </header>
-      {error && <p role="alert">{error}</p>}
+      {error && (
+        <div role="alert" className="error-banner">
+          <span>{error}</span>
+          <button className="error-retry" onClick={() => void refresh()} aria-label="Retry">
+            Retry
+          </button>
+        </div>
+      )}
       <label>
         Search
         <input
@@ -283,104 +300,131 @@ export function App() {
         </label>
         <button type="submit">Add note</button>
       </form>
-      <ul>
-        {notes.map((n) =>
-          editingId === n.id ? (
-            <li key={n.id}>
-              <label>
-                Edit title
-                <input
-                  aria-label="Edit title"
-                  value={editTitle}
-                  onChange={(e) => setEditTitle(e.target.value)}
-                />
-              </label>
-              <label>
-                Edit body
-                <textarea
-                  aria-label="Edit body"
-                  value={editBody}
-                  onChange={(e) => setEditBody(e.target.value)}
-                />
-              </label>
-              <label>
-                Edit tags
-                <input
-                  aria-label="Edit tags"
-                  placeholder="comma-separated tags"
-                  value={editTagsInput}
-                  onChange={(e) => setEditTagsInput(e.target.value)}
-                />
-              </label>
-              <button onClick={() => void onEditSave(n.id)}>Save</button>
-              <button onClick={onEditCancel}>Cancel</button>
+      {loading ? (
+        <ul aria-label="Loading notes" aria-busy="true">
+          {Array.from({ length: 3 }).map((_, i) => (
+            <li key={i} className="skeleton-card" aria-hidden="true">
+              <span className="skeleton-line skeleton-title" />
+              <span className="skeleton-line skeleton-body" />
             </li>
-          ) : (
-            <li key={n.id}>
-              <strong>{n.title}</strong>: {n.body}
-              {n.pinned && <span aria-label="Pinned">📌</span>}
-              {n.tags.length > 0 && (
-                <span aria-label="Tags">
-                  {n.tags.map((tag) => (
-                    <span key={tag} data-tag={tag}>
-                      {tag}
-                    </span>
-                  ))}
-                </span>
-              )}
+          ))}
+        </ul>
+      ) : (
+        <>
+          {!error && notes.length === 0 && (
+            <div className="empty-state" role="status">
+              <p>No notes yet. Create your first note above!</p>
               <button
-                aria-label={n.pinned ? `Unpin ${n.title}` : `Pin ${n.title}`}
-                onClick={() => void onTogglePin(n.id, n.pinned)}
+                className="empty-state-cta"
+                onClick={() => {
+                  document.querySelector<HTMLInputElement>('form input')?.focus();
+                }}
+                aria-label="Add your first note"
               >
-                {n.pinned ? 'Unpin' : 'Pin'}
+                Add your first note
               </button>
-              <button aria-label={`Edit ${n.title}`} onClick={() => onEditStart(n)}>
-                Edit
-              </button>
-              <button aria-label={`Delete ${n.title}`} onClick={() => void onDelete(n.id)}>
-                Delete
-              </button>
-              <button
-                aria-label={`Attachments for ${n.title}`}
-                onClick={() => void onToggleAttachments(n.id)}
-              >
-                {attachmentsOpen[n.id] ? 'Hide attachments' : 'Attachments'}
-              </button>
-              {attachmentsOpen[n.id] && (
-                <div aria-label={`Attachments panel for ${n.title}`}>
-                  {uploadError[n.id] && <p role="alert">{uploadError[n.id]}</p>}
+            </div>
+          )}
+          <ul aria-label="Notes list">
+            {notes.map((n) =>
+              editingId === n.id ? (
+                <li key={n.id}>
                   <label>
-                    Attach file
+                    Edit title
                     <input
-                      type="file"
-                      aria-label={`Upload attachment for ${n.title}`}
-                      onChange={(e) => void onUploadFile(n.id, e)}
+                      aria-label="Edit title"
+                      value={editTitle}
+                      onChange={(e) => setEditTitle(e.target.value)}
                     />
                   </label>
-                  {(attachments[n.id] ?? []).length === 0 ? (
-                    <p>No attachments yet.</p>
-                  ) : (
-                    <ul aria-label={`Attachment list for ${n.title}`}>
-                      {(attachments[n.id] ?? []).map((att) => (
-                        <li key={att.filename}>
-                          <a
-                            href={attachmentDownloadUrl(n.id, att.filename)}
-                            download={att.filename}
-                            aria-label={`Download ${att.filename}`}
-                          >
-                            {att.filename}
-                          </a>{' '}
-                          ({att.size} bytes)
-                        </li>
+                  <label>
+                    Edit body
+                    <textarea
+                      aria-label="Edit body"
+                      value={editBody}
+                      onChange={(e) => setEditBody(e.target.value)}
+                    />
+                  </label>
+                  <label>
+                    Edit tags
+                    <input
+                      aria-label="Edit tags"
+                      placeholder="comma-separated tags"
+                      value={editTagsInput}
+                      onChange={(e) => setEditTagsInput(e.target.value)}
+                    />
+                  </label>
+                  <button onClick={() => void onEditSave(n.id)}>Save</button>
+                  <button onClick={onEditCancel}>Cancel</button>
+                </li>
+              ) : (
+                <li key={n.id}>
+                  <strong>{n.title}</strong>: {n.body}
+                  {n.pinned && <span aria-label="Pinned">📌</span>}
+                  {n.tags.length > 0 && (
+                    <span aria-label="Tags">
+                      {n.tags.map((tag) => (
+                        <span key={tag} data-tag={tag}>
+                          {tag}
+                        </span>
                       ))}
-                    </ul>
+                    </span>
                   )}
-                </div>
-              )}
-            </li>
-          ),
-        )}
-      </ul>
+                  <button
+                    aria-label={n.pinned ? `Unpin ${n.title}` : `Pin ${n.title}`}
+                    onClick={() => void onTogglePin(n.id, n.pinned)}
+                  >
+                    {n.pinned ? 'Unpin' : 'Pin'}
+                  </button>
+                  <button aria-label={`Edit ${n.title}`} onClick={() => onEditStart(n)}>
+                    Edit
+                  </button>
+                  <button aria-label={`Delete ${n.title}`} onClick={() => void onDelete(n.id)}>
+                    Delete
+                  </button>
+                  <button
+                    aria-label={`Attachments for ${n.title}`}
+                    onClick={() => void onToggleAttachments(n.id)}
+                  >
+                    {attachmentsOpen[n.id] ? 'Hide attachments' : 'Attachments'}
+                  </button>
+                  {attachmentsOpen[n.id] && (
+                    <div aria-label={`Attachments panel for ${n.title}`}>
+                      {uploadError[n.id] && <p role="alert">{uploadError[n.id]}</p>}
+                      <label>
+                        Attach file
+                        <input
+                          type="file"
+                          aria-label={`Upload attachment for ${n.title}`}
+                          onChange={(e) => void onUploadFile(n.id, e)}
+                        />
+                      </label>
+                      {(attachments[n.id] ?? []).length === 0 ? (
+                        <p>No attachments yet.</p>
+                      ) : (
+                        <ul aria-label={`Attachment list for ${n.title}`}>
+                          {(attachments[n.id] ?? []).map((att) => (
+                            <li key={att.filename}>
+                              <a
+                                href={attachmentDownloadUrl(n.id, att.filename)}
+                                download={att.filename}
+                                aria-label={`Download ${att.filename}`}
+                              >
+                                {att.filename}
+                              </a>{' '}
+                              ({att.size} bytes)
+                            </li>
+                          ))}
+                        </ul>
+                      )}
+                    </div>
+                  )}
+                </li>
+              ),
+            )}
+          </ul>
+        </>
+      )}
       <nav aria-label="Pagination">
         <button
           onClick={() => setPage((p) => p - 1)}
