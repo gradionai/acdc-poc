@@ -50,9 +50,6 @@ test('upload two attachments, delete one, assert only the other remains', async 
   await expect(item.getByRole('link', { name: /keep-me\.txt/i })).toBeVisible();
 
   // Clean up
-  await item
-    .getByRole('button', { name: /^delete/i })
-    .first()
-    .click();
+  await item.getByRole('button', { name: /^delete \[delete-att-e2e\]/i }).click();
   await expect(item).toHaveCount(0);
 });
