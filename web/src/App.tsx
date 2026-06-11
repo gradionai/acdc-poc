@@ -151,10 +151,16 @@ export function App() {
    * shortcuts are wrong when pinned notes occupy the first page(s).
    */
   async function pageContainingNote(id: string, s: typeof sort): Promise<number> {
-    // Fetch the full unfiltered list (no query, no tag filter) under the given sort.
-    // A large pageSize ensures all notes are returned in a single request.
-    const fullPage = await listNotes(1, 10_000, '', '', s);
-    const index = fullPage.notes.findIndex((n) => n.id === id);
+    // First request discovers the real total; if the list fits within one page
+    // we can resolve immediately. Otherwise fetch the exact number of notes so
+    // we never silently miss notes beyond an arbitrary ceiling.
+    const first = await listNotes(1, PAGE_SIZE, '', '', s);
+    if (first.total <= PAGE_SIZE) {
+      const i = first.notes.findIndex((n) => n.id === id);
+      return i >= 0 ? Math.floor(i / PAGE_SIZE) + 1 : 1;
+    }
+    const full = await listNotes(1, first.total, '', '', s);
+    const index = full.notes.findIndex((n) => n.id === id);
     return index >= 0 ? Math.floor(index / PAGE_SIZE) + 1 : 1;
   }
 
