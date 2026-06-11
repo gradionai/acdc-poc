@@ -1457,12 +1457,19 @@ describe('App — title-sort create with duplicate titles', () => {
     // second one (higher id) will appear on whichever page its rank lands on —
     // the test verifies the app navigates away from page 1 and shows the new note.
     const initialNotes = [
-      { id: '1', title: 'Apple', body: 'b', tags: [] as string[], pinned: false },
-      { id: '2', title: 'Banana', body: 'b', tags: [] as string[], pinned: false },
-      { id: '3', title: 'Cherry', body: 'b', tags: [] as string[], pinned: false },
-      { id: '4', title: 'Date', body: 'b', tags: [] as string[], pinned: false },
-      { id: '5', title: 'Elderberry', body: 'b', tags: [] as string[], pinned: false },
-      { id: '6', title: 'Zebra', body: 'b', tags: [] as string[], pinned: false },
+      { id: '1', title: 'Apple', body: 'b', tags: [] as string[], pinned: false, archived: false },
+      { id: '2', title: 'Banana', body: 'b', tags: [] as string[], pinned: false, archived: false },
+      { id: '3', title: 'Cherry', body: 'b', tags: [] as string[], pinned: false, archived: false },
+      { id: '4', title: 'Date', body: 'b', tags: [] as string[], pinned: false, archived: false },
+      {
+        id: '5',
+        title: 'Elderberry',
+        body: 'b',
+        tags: [] as string[],
+        pinned: false,
+        archived: false,
+      },
+      { id: '6', title: 'Zebra', body: 'b', tags: [] as string[], pinned: false, archived: false },
     ];
     const notes = [...initialNotes];
     let nextId = 7;
@@ -1481,6 +1488,7 @@ describe('App — title-sort create with duplicate titles', () => {
             body: b.body,
             tags: b.tags ?? [],
             pinned: false,
+            archived: false,
           };
           notes.push(n);
           return new Response(JSON.stringify(n), { status: 201 });
@@ -1528,11 +1536,18 @@ describe('App — duplicate sort-aware navigation', () => {
   function makeSortAwareSetup() {
     // 5 notes: Apple–Elderberry, so page 1 is exactly full.
     const initialNotes = [
-      { id: '1', title: 'Apple', body: 'b', tags: [] as string[], pinned: false },
-      { id: '2', title: 'Banana', body: 'b', tags: [] as string[], pinned: false },
-      { id: '3', title: 'Cherry', body: 'b', tags: [] as string[], pinned: false },
-      { id: '4', title: 'Date', body: 'b', tags: [] as string[], pinned: false },
-      { id: '5', title: 'Elderberry', body: 'b', tags: [] as string[], pinned: false },
+      { id: '1', title: 'Apple', body: 'b', tags: [] as string[], pinned: false, archived: false },
+      { id: '2', title: 'Banana', body: 'b', tags: [] as string[], pinned: false, archived: false },
+      { id: '3', title: 'Cherry', body: 'b', tags: [] as string[], pinned: false, archived: false },
+      { id: '4', title: 'Date', body: 'b', tags: [] as string[], pinned: false, archived: false },
+      {
+        id: '5',
+        title: 'Elderberry',
+        body: 'b',
+        tags: [] as string[],
+        pinned: false,
+        archived: false,
+      },
     ];
     const notes = [...initialNotes];
     let nextId = initialNotes.length + 1;
@@ -1553,6 +1568,7 @@ describe('App — duplicate sort-aware navigation', () => {
             body: source.body,
             tags: [...source.tags],
             pinned: false,
+            archived: false,
           };
           notes.push(copy);
           return new Response(JSON.stringify(copy), { status: 201 });
@@ -1691,6 +1707,7 @@ describe('App — create with pinned notes', () => {
       body: `body ${i + 1}`,
       tags: [] as string[],
       pinned: true,
+      archived: false,
     }));
     const notes = [...pinned];
     let nextId = pinned.length + 1;
@@ -1710,6 +1727,7 @@ describe('App — create with pinned notes', () => {
             body: b.body,
             tags: b.tags ?? [],
             pinned: false,
+            archived: false,
           };
           notes.push(n);
           return new Response(JSON.stringify(n), { status: 201 });
@@ -1762,6 +1780,7 @@ describe('App — create with pinned notes', () => {
       body: `body ${i + 1}`,
       tags: [] as string[],
       pinned: true,
+      archived: false,
     }));
     const notes = [...pinned];
     let nextId = pinned.length + 1;
@@ -1781,6 +1800,7 @@ describe('App — create with pinned notes', () => {
             body: b.body,
             tags: b.tags ?? [],
             pinned: false,
+            archived: false,
           };
           notes.push(n);
           return new Response(JSON.stringify(n), { status: 201 });
