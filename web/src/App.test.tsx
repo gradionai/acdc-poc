@@ -15,12 +15,60 @@ function buildResponse(notes: MockNote[], page = 1, pageSize = 5) {
   });
 }
 
+type MockAttachment = { filename: string; contentType: string; size: number; data: string };
+
 function mockFetchSequence() {
   let notes: MockNote[] = [];
   let seq = 0;
+  const attachmentStore: Record<string, MockAttachment[]> = {};
   vi.stubGlobal(
     'fetch',
     vi.fn(async (url: string, init?: RequestInit) => {
+      const urlStr = url as string;
+
+      // POST /api/notes/:id/attachments
+      if (init?.method === 'POST' && /\/api\/notes\/[^/]+\/attachments$/.test(urlStr)) {
+        const noteId = urlStr.split('/').at(-2) ?? '';
+        if (!notes.find((n) => n.id === noteId)) {
+          return new Response(JSON.stringify({ error: 'not found' }), { status: 404 });
+        }
+        const form = init.body as FormData;
+        const file = form.get('file') as File;
+        const meta: MockAttachment = {
+          filename: file.name,
+          contentType: file.type,
+          size: file.size,
+          data: '',
+        };
+        if (!attachmentStore[noteId]) attachmentStore[noteId] = [];
+        attachmentStore[noteId].push(meta);
+        return new Response(
+          JSON.stringify({
+            filename: meta.filename,
+            contentType: meta.contentType,
+            size: meta.size,
+          }),
+          { status: 201 },
+        );
+      }
+
+      // GET /api/notes/:id/attachments (no method = default GET)
+      if (
+        (init?.method === undefined || init?.method === 'GET') &&
+        /\/api\/notes\/[^/]+\/attachments$/.test(urlStr)
+      ) {
+        const noteId = urlStr.split('/').at(-2) ?? '';
+        if (!notes.find((n) => n.id === noteId)) {
+          return new Response(JSON.stringify({ error: 'not found' }), { status: 404 });
+        }
+        const metas = (attachmentStore[noteId] ?? []).map((a) => ({
+          filename: a.filename,
+          contentType: a.contentType,
+          size: a.size,
+        }));
+        return new Response(JSON.stringify(metas), { status: 200 });
+      }
+
       if (init?.method === 'POST') {
         const b = JSON.parse(String(init.body)) as {
           title: string;
@@ -32,7 +80,7 @@ function mockFetchSequence() {
         return new Response(JSON.stringify(n), { status: 201 });
       }
       if (init?.method === 'PUT') {
-        const id = (url as string).split('/').pop();
+        const id = urlStr.split('/').pop();
         const b = JSON.parse(String(init.body)) as {
           title?: string;
           body?: string;
@@ -54,12 +102,12 @@ function mockFetchSequence() {
           : new Response(JSON.stringify({ error: 'not found' }), { status: 404 });
       }
       if (init?.method === 'DELETE') {
-        const id = (url as string).split('/').pop();
+        const id = urlStr.split('/').pop();
         notes = notes.filter((n) => n.id !== id);
         return new Response(null, { status: 204 });
       }
       // Parse page/pageSize/q/tag from URL
-      const urlObj = new URL(url as string, 'http://localhost');
+      const urlObj = new URL(urlStr, 'http://localhost');
       const page = Number(urlObj.searchParams.get('page') ?? '1');
       const pageSize = Number(urlObj.searchParams.get('pageSize') ?? '5');
       const q = urlObj.searchParams.get('q') ?? '';
@@ -383,7 +431,7 @@ describe('App — tags', () => {
 
     await waitFor(() => expect(screen.getByText('Note for tags edit')).toBeInTheDocument());
 
-    await userEvent.click(screen.getByRole('button', { name: /edit/i }));
+    await userEvent.click(screen.getByRole('button', { name: /^edit note for tags edit$/i }));
 
     const editTagsInput = screen.getByRole('textbox', { name: /edit tags/i });
     await userEvent.clear(editTagsInput);
@@ -431,6 +479,85 @@ describe('App — tag deduplication', () => {
     await waitFor(() => expect(screen.getByText('Dup tag note')).toBeInTheDocument());
     const tagSpans = screen.getAllByText('alpha');
     expect(tagSpans).toHaveLength(1);
+  });
+});
+
+describe('App — attachments', () => {
+  beforeEach(() => mockFetchSequence());
+
+  it('shows Attachments button for each note', async () => {
+    render(<App />);
+    await userEvent.type(screen.getByLabelText(/^title$/i), 'Attach note');
+    await userEvent.type(screen.getByLabelText(/^body$/i), 'body');
+    await userEvent.click(screen.getByRole('button', { name: /add note/i }));
+    await waitFor(() => expect(screen.getByText('Attach note')).toBeInTheDocument());
+
+    expect(
+      screen.getByRole('button', { name: /attachments for attach note/i }),
+    ).toBeInTheDocument();
+  });
+
+  it('opens attachments panel and shows empty state', async () => {
+    render(<App />);
+    await userEvent.type(screen.getByLabelText(/^title$/i), 'Attach note open');
+    await userEvent.type(screen.getByLabelText(/^body$/i), 'body');
+    await userEvent.click(screen.getByRole('button', { name: /add note/i }));
+    await waitFor(() => expect(screen.getByText('Attach note open')).toBeInTheDocument());
+
+    const attBtn = screen.getByRole('button', { name: /attachments for attach note open/i });
+    await userEvent.click(attBtn);
+
+    await waitFor(() => expect(screen.getByText(/no attachments yet/i)).toBeInTheDocument());
+  });
+
+  it('uploads an attachment and shows it in the list', async () => {
+    render(<App />);
+    await userEvent.type(screen.getByLabelText(/^title$/i), 'Attach note upload');
+    await userEvent.type(screen.getByLabelText(/^body$/i), 'body');
+    await userEvent.click(screen.getByRole('button', { name: /add note/i }));
+    await waitFor(() => expect(screen.getByText('Attach note upload')).toBeInTheDocument());
+
+    // Open the attachments panel
+    await userEvent.click(
+      screen.getByRole('button', { name: /attachments for attach note upload/i }),
+    );
+    await waitFor(() => expect(screen.getByText(/no attachments yet/i)).toBeInTheDocument());
+
+    // Upload a file via the hidden file input
+    const file = new File(['hello world'], 'hello.txt', { type: 'text/plain' });
+    const uploadInput = screen.getByLabelText(/upload attachment for attach note upload/i);
+    await userEvent.upload(uploadInput, file);
+
+    await waitFor(() => expect(screen.getByText('hello.txt')).toBeInTheDocument());
+    expect(screen.queryByText(/no attachments yet/i)).not.toBeInTheDocument();
+  });
+});
+
+describe('attachment mock — 404 contract', () => {
+  beforeEach(() => mockFetchSequence());
+
+  it('returns 404 for GET attachments on an unknown (non-numeric) note id', async () => {
+    const res = await fetch('/api/notes/non-numeric-id/attachments');
+    expect(res.status).toBe(404);
+    const body = (await res.json()) as { error: string };
+    expect(body.error).toBe('not found');
+  });
+
+  it('returns 404 for POST attachments on an unknown (non-numeric) note id', async () => {
+    const form = new FormData();
+    form.append('file', new File(['x'], 'x.txt', { type: 'text/plain' }));
+    const res = await fetch('/api/notes/non-numeric-id/attachments', {
+      method: 'POST',
+      body: form,
+    });
+    expect(res.status).toBe(404);
+    const body = (await res.json()) as { error: string };
+    expect(body.error).toBe('not found');
+  });
+
+  it('returns 404 for GET attachments on a valid-looking but non-existent numeric note id', async () => {
+    const res = await fetch('/api/notes/99999/attachments');
+    expect(res.status).toBe(404);
   });
 });
 

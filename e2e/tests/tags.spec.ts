@@ -59,8 +59,9 @@ test('edit tags on a note and see updated tags', async ({ page }) => {
   await expect(item).toBeVisible();
   await expect(item).toContainText(originalTag);
 
-  // Open inline edit form.
-  await item.getByRole('button', { name: /edit/i }).click();
+  // Open inline edit form (aria-label is "Edit <title>"; ^ anchors the match to
+  // avoid selecting "Attachments for …edit…" when the title contains "edit").
+  await item.getByRole('button', { name: /^edit /i }).click();
 
   const editTagsInput = page.getByRole('textbox', { name: /edit tags/i });
   await expect(editTagsInput).toBeVisible();

@@ -1,5 +1,15 @@
-import { useEffect, useRef, useState, type FormEvent } from 'react';
-import { createNote, deleteNote, listNotes, updateNote, type Note } from './api';
+import { useEffect, useRef, useState, type ChangeEvent, type FormEvent } from 'react';
+import {
+  attachmentDownloadUrl,
+  createNote,
+  deleteNote,
+  listAttachments,
+  listNotes,
+  updateNote,
+  uploadAttachment,
+  type AttachmentMeta,
+  type Note,
+} from './api';
 
 const PAGE_SIZE = 5;
 const SEARCH_DEBOUNCE_MS = 300;
@@ -31,6 +41,12 @@ export function App() {
   const [searchInput, setSearchInput] = useState('');
   const [query, setQuery] = useState('');
   const [tagFilter, setTagFilter] = useState('');
+  /** noteId → list of attachment metadata (loaded lazily on expand). */
+  const [attachments, setAttachments] = useState<Record<string, AttachmentMeta[]>>({});
+  /** noteId → true while attachments panel is open. */
+  const [attachmentsOpen, setAttachmentsOpen] = useState<Record<string, boolean>>({});
+  /** noteId → upload error string. */
+  const [uploadError, setUploadError] = useState<Record<string, string | null>>({});
 
   // Monotonically increasing counter; each refresh call captures its own id
   // and only applies its result if no newer request has been issued since.
@@ -136,6 +152,36 @@ export function App() {
       await refresh(page);
     } catch (e) {
       setError(String(e));
+    }
+  }
+
+  async function onToggleAttachments(id: string) {
+    const isOpen = attachmentsOpen[id] ?? false;
+    if (isOpen) {
+      setAttachmentsOpen((prev) => ({ ...prev, [id]: false }));
+      return;
+    }
+    setAttachmentsOpen((prev) => ({ ...prev, [id]: true }));
+    try {
+      const metas = await listAttachments(id);
+      setAttachments((prev) => ({ ...prev, [id]: metas }));
+    } catch (e) {
+      setError(String(e));
+    }
+  }
+
+  async function onUploadFile(id: string, e: ChangeEvent<HTMLInputElement>) {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    // Reset the input so the same file can be re-uploaded after correction
+    e.target.value = '';
+    setUploadError((prev) => ({ ...prev, [id]: null }));
+    try {
+      await uploadAttachment(id, file);
+      const metas = await listAttachments(id);
+      setAttachments((prev) => ({ ...prev, [id]: metas }));
+    } catch (err) {
+      setUploadError((prev) => ({ ...prev, [id]: String(err) }));
     }
   }
 
@@ -246,8 +292,49 @@ export function App() {
                   ))}
                 </span>
               )}
-              <button onClick={() => onEditStart(n)}>Edit</button>
-              <button onClick={() => void onDelete(n.id)}>Delete</button>
+              <button aria-label={`Edit ${n.title}`} onClick={() => onEditStart(n)}>
+                Edit
+              </button>
+              <button aria-label={`Delete ${n.title}`} onClick={() => void onDelete(n.id)}>
+                Delete
+              </button>
+              <button
+                aria-label={`Attachments for ${n.title}`}
+                onClick={() => void onToggleAttachments(n.id)}
+              >
+                {attachmentsOpen[n.id] ? 'Hide attachments' : 'Attachments'}
+              </button>
+              {attachmentsOpen[n.id] && (
+                <div aria-label={`Attachments panel for ${n.title}`}>
+                  {uploadError[n.id] && <p role="alert">{uploadError[n.id]}</p>}
+                  <label>
+                    Attach file
+                    <input
+                      type="file"
+                      aria-label={`Upload attachment for ${n.title}`}
+                      onChange={(e) => void onUploadFile(n.id, e)}
+                    />
+                  </label>
+                  {(attachments[n.id] ?? []).length === 0 ? (
+                    <p>No attachments yet.</p>
+                  ) : (
+                    <ul aria-label={`Attachment list for ${n.title}`}>
+                      {(attachments[n.id] ?? []).map((att) => (
+                        <li key={att.filename}>
+                          <a
+                            href={attachmentDownloadUrl(n.id, att.filename)}
+                            download={att.filename}
+                            aria-label={`Download ${att.filename}`}
+                          >
+                            {att.filename}
+                          </a>{' '}
+                          ({att.size} bytes)
+                        </li>
+                      ))}
+                    </ul>
+                  )}
+                </div>
+              )}
             </li>
           ),
         )}

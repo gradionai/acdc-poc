@@ -83,3 +83,46 @@ export async function deleteNote(id: string): Promise<void> {
   const res = await fetch(`${base}/${id}`, { method: 'DELETE' });
   if (!res.ok && res.status !== 404) throw new Error('failed to delete note');
 }
+
+export interface AttachmentMeta {
+  filename: string;
+  contentType: string;
+  size: number;
+}
+
+function isAttachmentMeta(value: unknown): value is AttachmentMeta {
+  if (!value || typeof value !== 'object') return false;
+  const v = value as Record<string, unknown>;
+  return (
+    typeof v.filename === 'string' &&
+    typeof v.contentType === 'string' &&
+    typeof v.size === 'number'
+  );
+}
+
+export async function uploadAttachment(noteId: string, file: File): Promise<AttachmentMeta> {
+  const form = new FormData();
+  form.append('file', file);
+  const res = await fetch(`${base}/${noteId}/attachments`, { method: 'POST', body: form });
+  if (!res.ok) {
+    const payload = (await res.json().catch(() => ({}))) as { error?: string };
+    throw new Error(payload.error ?? 'failed to upload attachment');
+  }
+  const created: unknown = await res.json();
+  if (!isAttachmentMeta(created)) throw new Error('invalid attachment payload');
+  return created;
+}
+
+export async function listAttachments(noteId: string): Promise<AttachmentMeta[]> {
+  const res = await fetch(`${base}/${noteId}/attachments`);
+  if (!res.ok) throw new Error('failed to load attachments');
+  const data: unknown = await res.json();
+  if (!Array.isArray(data) || !data.every(isAttachmentMeta)) {
+    throw new Error('invalid attachments payload');
+  }
+  return data;
+}
+
+export function attachmentDownloadUrl(noteId: string, filename: string): string {
+  return `${base}/${noteId}/attachments/${encodeURIComponent(filename)}`;
+}

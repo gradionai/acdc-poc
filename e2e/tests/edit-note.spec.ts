@@ -15,8 +15,9 @@ test('create then edit a note and see updated text', async ({ page }) => {
   const item = page.getByRole('listitem').filter({ hasText: title });
   await expect(item).toBeVisible();
 
-  // Open the inline edit form
-  await item.getByRole('button', { name: /edit/i }).click();
+  // Open the inline edit form (aria-label is "Edit <title>", anchored with ^ to
+  // avoid matching "Attachments for …edit…" when the title contains "edit").
+  await item.getByRole('button', { name: /^edit /i }).click();
 
   // The edit inputs should now be visible
   const editTitleInput = page.getByRole('textbox', { name: /edit title/i });

@@ -1,7 +1,8 @@
-import express, { type Express, type Request, type Response } from 'express';
+import express, { type Express, type Request, type Response, type NextFunction } from 'express';
 import { fileURLToPath } from 'node:url';
 import path from 'node:path';
 import fs from 'node:fs';
+import multer from 'multer';
 import { NoteStore } from './store.js';
 import { createNotesRouter } from './notes.js';
 
@@ -19,6 +20,24 @@ export function createApp(store: NoteStore = new NoteStore()): Express {
   app.use('/api/notes', createNotesRouter(store));
   // Any other /api/* is a JSON 404 — never the SPA fallback.
   app.use('/api', (_req: Request, res: Response) => res.status(404).json({ error: 'not found' }));
+
+  // Handle multer errors (file too large, rejected content type) as JSON 400.
+  // eslint-disable-next-line @typescript-eslint/no-unused-vars
+  app.use((err: unknown, _req: Request, res: Response, _next: NextFunction) => {
+    if (err instanceof multer.MulterError) {
+      if (err.code === 'LIMIT_FILE_SIZE') {
+        res.status(400).json({ error: 'file too large' });
+        return;
+      }
+      res.status(400).json({ error: err.message });
+      return;
+    }
+    if (err instanceof Error) {
+      res.status(400).json({ error: err.message });
+      return;
+    }
+    res.status(500).json({ error: 'internal server error' });
+  });
 
   // Static SPA + history fallback (only when a build exists).
   if (fs.existsSync(webDist)) {
