@@ -186,11 +186,23 @@ export function App() {
     }
   }
 
-  async function onTogglePin(id: string) {
+  async function onTogglePin(id: string, currentlyPinned: boolean) {
     try {
       await togglePin(id);
       setError(null);
-      await refresh(page);
+      if (currentlyPinned) {
+        // Unpin: note stays on (or near) the current page — just refresh it.
+        await refresh(page);
+      } else {
+        // Pin: the server moves pinned notes to the front of the sorted list,
+        // so the just-pinned note will appear on page 1. Navigate there so the
+        // user can see the confirmation (button changes to "Unpin …").
+        if (page === 1) {
+          await refresh(1);
+        } else {
+          setPage(1);
+        }
+      }
     } catch (e) {
       setError(String(e));
     }
@@ -306,7 +318,7 @@ export function App() {
               )}
               <button
                 aria-label={n.pinned ? `Unpin ${n.title}` : `Pin ${n.title}`}
-                onClick={() => void onTogglePin(n.id)}
+                onClick={() => void onTogglePin(n.id, n.pinned)}
               >
                 {n.pinned ? 'Unpin' : 'Pin'}
               </button>

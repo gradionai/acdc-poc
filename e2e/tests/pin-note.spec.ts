@@ -70,9 +70,13 @@ test('pin a note and assert it moves to the top of the list', async ({ page }) =
     .getByRole('button', { name: new RegExp(`^pin ${newerTitle}$`, 'i') })
     .click();
 
-  // Wait for the button label to change to "Unpin …" confirming the round-trip
+  // After pinning the app navigates to page 1 (pinned notes sort to the top).
+  // Re-locate the note on the current page rather than using the stale handle.
   await expect(
-    newerItemForPin.getByRole('button', { name: new RegExp(`^unpin ${newerTitle}$`, 'i') }),
+    page
+      .getByRole('listitem')
+      .filter({ hasText: newerTitle })
+      .getByRole('button', { name: new RegExp(`^unpin ${newerTitle}$`, 'i') }),
   ).toBeVisible();
 
   // --- Assert pinned note appears before the older (unpinned) note ---

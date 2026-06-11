@@ -547,6 +547,60 @@ describe('App — pin', () => {
       expect(screen.getByRole('button', { name: /^pin unpin me$/i })).toBeInTheDocument(),
     );
   });
+
+  it('pinning a note on page 2 navigates to page 1 so the pinned note is visible', async () => {
+    // 6 notes: page 1 has notes 1-5, page 2 has note 6. Pin note 6 from page 2;
+    // the app should navigate back to page 1 where pinned notes sort first.
+    const initialNotes = Array.from({ length: 6 }, (_, i) => ({
+      id: String(i + 1),
+      title: `Pg2Pin ${i + 1}`,
+      body: `body ${i + 1}`,
+      tags: [] as string[],
+      pinned: false,
+    }));
+    const notes = initialNotes.map((n) => ({ ...n }));
+    vi.stubGlobal(
+      'fetch',
+      vi.fn(async (url: string, init?: RequestInit) => {
+        const urlStr = url as string;
+        if (init?.method === 'PATCH' && /\/api\/notes\/[^/]+\/pin$/.test(urlStr)) {
+          const noteId = urlStr.split('/').at(-2) ?? '';
+          const idx = notes.findIndex((n) => n.id === noteId);
+          if (idx !== -1) notes[idx] = { ...notes[idx], pinned: !notes[idx].pinned };
+          const pinnedNotes = notes.filter((n) => n.pinned);
+          const unpinnedNotes = notes.filter((n) => !n.pinned);
+          notes.splice(0, notes.length, ...pinnedNotes, ...unpinnedNotes);
+          return new Response(JSON.stringify(notes[idx === -1 ? 0 : 0]), { status: 200 });
+        }
+        const urlObj = new URL(urlStr, 'http://localhost');
+        const page = Number(urlObj.searchParams.get('page') ?? '1');
+        const pageSize = Number(urlObj.searchParams.get('pageSize') ?? '5');
+        const start = (page - 1) * pageSize;
+        const items = notes.slice(start, start + pageSize);
+        return new Response(JSON.stringify(items), {
+          status: 200,
+          headers: { 'X-Total-Count': String(notes.length) },
+        });
+      }),
+    );
+
+    render(<App />);
+    // Page 1 loads with notes 1-5
+    await waitFor(() => expect(screen.getByText('Pg2Pin 1')).toBeInTheDocument());
+
+    // Navigate to page 2
+    await userEvent.click(screen.getByRole('button', { name: /next/i }));
+    await waitFor(() => expect(screen.getByText('Pg2Pin 6')).toBeInTheDocument());
+    expect(screen.queryByText('Pg2Pin 1')).not.toBeInTheDocument();
+
+    // Pin the note on page 2
+    await userEvent.click(screen.getByRole('button', { name: /^pin pg2pin 6$/i }));
+
+    // App should navigate to page 1 where the pinned note now sorts first
+    await waitFor(() => expect(screen.getByText('Pg2Pin 6')).toBeInTheDocument());
+    // Page indicator should show page 1
+    expect(screen.getByRole('button', { name: /previous/i })).toBeDisabled();
+  });
 });
 
 describe('App — attachments', () => {
