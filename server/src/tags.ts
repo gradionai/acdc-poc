@@ -11,6 +11,9 @@ function validateTagName(value: unknown, fieldName: string): string | null {
   if (value.trim().length > MAX_TAG_LENGTH) {
     return `${fieldName} must be at most ${MAX_TAG_LENGTH} characters`;
   }
+  if (value.includes(',')) {
+    return `${fieldName} must not contain commas`;
+  }
   return null;
 }
 

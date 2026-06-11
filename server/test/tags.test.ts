@@ -127,6 +127,24 @@ describe('POST /api/tags/rename', () => {
     expect(res.body).toHaveProperty('error');
   });
 
+  it('returns 400 when "from" contains a comma', async () => {
+    const app = createApp();
+    const res = await request(app)
+      .post('/api/tags/rename')
+      .send({ from: 'a,b', to: 'new' })
+      .expect(400);
+    expect(res.body).toHaveProperty('error');
+  });
+
+  it('returns 400 when "to" contains a comma', async () => {
+    const app = createApp();
+    const res = await request(app)
+      .post('/api/tags/rename')
+      .send({ from: 'old', to: 'a,b' })
+      .expect(400);
+    expect(res.body).toHaveProperty('error');
+  });
+
   it('returns 409 when "to" already exists as a different tag', async () => {
     const store = new NoteStore();
     const app = createApp(store);
@@ -197,6 +215,12 @@ describe('DELETE /api/tags/:tag', () => {
     // A very long tag name (over 100 chars) sent as URL segment should be rejected
     const longTag = 'a'.repeat(101);
     const res = await request(app).delete(`/api/tags/${longTag}`).expect(400);
+    expect(res.body).toHaveProperty('error');
+  });
+
+  it('returns 400 when tag name contains a comma', async () => {
+    const app = createApp();
+    const res = await request(app).delete('/api/tags/a%2Cb').expect(400);
     expect(res.body).toHaveProperty('error');
   });
 });

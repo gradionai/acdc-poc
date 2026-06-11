@@ -78,12 +78,16 @@ test('tag management panel: rename a tag, verify notes updated, then delete it',
   await page.getByRole('button', { name: /manage tags/i }).click();
   await expect(page.getByRole('region', { name: /tag manager/i })).toBeVisible();
 
+  const tagManagerPanelReopened = page.getByRole('region', { name: /tag manager/i });
   page.once('dialog', (dialog) => dialog.accept());
   await page.getByRole('button', { name: new RegExp(`delete tag ${renamedTag}`, 'i') }).click();
 
   // Renamed tag should disappear from the list
   await expect(
-    page.getByRole('listitem').filter({ hasText: renamedTag }).filter({ hasText: 'note' }),
+    tagManagerPanelReopened
+      .getByRole('listitem')
+      .filter({ hasText: renamedTag })
+      .filter({ hasText: 'note' }),
   ).not.toBeVisible();
 
   // Close manager and verify tag is gone from notes

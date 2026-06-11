@@ -23,7 +23,7 @@ export function TagManager({ onChanged }: Props) {
     try {
       setTags(await listTags());
     } catch (e) {
-      setError(String(e));
+      setError(e instanceof Error ? e.message : String(e));
     } finally {
       setLoading(false);
     }
@@ -56,7 +56,7 @@ export function TagManager({ onChanged }: Props) {
       await load();
       onChanged();
     } catch (e) {
-      setError(String(e));
+      setError(e instanceof Error ? e.message : String(e));
     }
   }
 
@@ -68,7 +68,7 @@ export function TagManager({ onChanged }: Props) {
       await load();
       onChanged();
     } catch (e) {
-      setError(String(e));
+      setError(e instanceof Error ? e.message : String(e));
     }
   }
 
