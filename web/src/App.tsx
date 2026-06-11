@@ -2,6 +2,7 @@ import { useEffect, useRef, useState, type ChangeEvent, type FormEvent } from 'r
 import {
   attachmentDownloadUrl,
   createNote,
+  deleteAttachment,
   deleteNote,
   duplicateNote,
   listAttachments,
@@ -220,6 +221,17 @@ export function App() {
     } catch (e) {
       addToast('Failed to toggle pin', 'error');
       setError(String(e));
+    }
+  }
+
+  async function onDeleteAttachment(noteId: string, filename: string) {
+    if (!window.confirm(`Delete attachment "${filename}"?`)) return;
+    try {
+      await deleteAttachment(noteId, filename);
+      const metas = await listAttachments(noteId);
+      setAttachments((prev) => ({ ...prev, [noteId]: metas }));
+    } catch (e) {
+      setUploadError((prev) => ({ ...prev, [noteId]: String(e) }));
     }
   }
 
@@ -480,6 +492,13 @@ export function App() {
                             {att.filename}
                           </a>{' '}
                           ({att.size} bytes)
+                          <Button
+                            variant="danger"
+                            aria-label={`Delete attachment ${att.filename}`}
+                            onClick={() => void onDeleteAttachment(n.id, att.filename)}
+                          >
+                            Delete
+                          </Button>
                         </li>
                       ))}
                     </ul>
