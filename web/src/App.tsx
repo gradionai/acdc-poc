@@ -123,22 +123,38 @@ export function App() {
     return () => clearTimeout(timer);
   }, [searchInput]);
 
+  /**
+   * Determine which page contains the note with the given id under the given
+   * sort order by fetching the full unfiltered sorted list and locating the
+   * note by its unique id. This is robust to all sort orders, pinned-first
+   * ordering (pinned notes always sort first regardless of sort direction), and
+   * any note count. Returns 1 as a safe fallback if the note is not found.
+   *
+   * Deliberately does NOT special-case newest→1 or oldest→last because those
+   * shortcuts are wrong when pinned notes occupy the first page(s).
+   */
+  async function pageContainingNote(id: string, s: typeof sort): Promise<number> {
+    // Fetch the full unfiltered list (no query, no tag filter) under the given sort.
+    // A large pageSize ensures all notes are returned in a single request.
+    const fullPage = await listNotes(1, 10_000, '', '', s);
+    const index = fullPage.notes.findIndex((n) => n.id === id);
+    return index >= 0 ? Math.floor(index / PAGE_SIZE) + 1 : 1;
+  }
+
   async function onSubmit(e: FormEvent) {
     e.preventDefault();
     if (!title.trim() || !body.trim()) return;
     try {
-      await createNote({ title, body, tags: parseTags(tagsInput) });
+      const created = await createNote({ title, body, tags: parseTags(tagsInput) });
       setTitle('');
       setBody('');
       setTagsInput('');
       setError(null);
       addToast('Note created', 'success');
-      // If a search filter is active, clear it before navigating so the new
-      // note is always visible. With a filter active, `total` reflects only
-      // the filtered count; the new note may not match the query, so
-      // navigating to the target page of the unfiltered results would not show it.
-      // Fetch the real (unfiltered) total to compute the correct destination page.
-      const unfilteredTotal = query !== '' ? (await listNotes(1, 1, '')).total : total;
+      // Clear both active filters before navigating so the new note is always
+      // visible (it may not match the active query or tag filter).
+      // pageContainingNote fetches the fully unfiltered list, so clearing both
+      // filters ensures the displayed list matches the computed destination page.
       if (query !== '') {
         // Signal the debounce effect to skip its setPage(1) reset; onSubmit
         // will set the correct page directly after clearing the search.
@@ -146,34 +162,17 @@ export function App() {
         setSearchInput('');
         setQuery('');
       }
-      const newTotal = unfilteredTotal + 1;
+      if (tagFilter !== '') {
+        setTagFilter('');
+      }
       // Navigate to the page where the newly created note will appear.
-      if (sort === 'oldest') {
-        // oldest: the new note always sorts last → last page.
-        const lastPage = Math.max(1, Math.ceil(newTotal / PAGE_SIZE));
-        if (page === lastPage && query === '') {
-          await refresh(lastPage, '', tagFilter, sort);
-        } else {
-          setPage(lastPage);
-        }
-      } else if (sort === 'newest') {
-        // newest: the new note always sorts first → page 1.
-        if (page === 1 && query === '') {
-          await refresh(1, '', tagFilter, sort);
-        } else {
-          setPage(1);
-        }
+      // pageContainingNote fetches the full unfiltered list and finds the note
+      // by its unique id — correct for all sort orders including pinned-first.
+      const dest = await pageContainingNote(created.id, sort);
+      if (page === dest && query === '' && tagFilter === '') {
+        await refresh(dest, '', '', sort);
       } else {
-        // title: the new note's page depends on its alphabetical rank among
-        // all (unfiltered) notes. Fetch the full sorted list to find its position.
-        const fullPage = await listNotes(1, newTotal, '', tagFilter, 'title');
-        const rank = fullPage.notes.findIndex((n) => n.title === title) + 1;
-        const dest = rank > 0 ? Math.ceil(rank / PAGE_SIZE) : 1;
-        if (page === dest && query === '') {
-          await refresh(dest, '', tagFilter, sort);
-        } else {
-          setPage(dest);
-        }
+        setPage(dest);
       }
     } catch (e: unknown) {
       addToast('Failed to create note', 'error');
@@ -321,18 +320,34 @@ export function App() {
 
   async function onDuplicate(id: string) {
     try {
-      await duplicateNote(id);
+      const copy = await duplicateNote(id);
       setError(null);
-      // The duplicate is appended at the end (newest createdAt); navigate to the
-      // last page so it is immediately visible.
-      const newTotal = total + 1;
-      const lastPage = Math.max(1, Math.ceil(newTotal / PAGE_SIZE));
-      if (page === lastPage) {
-        await refresh(lastPage);
+      addToast('Note duplicated', 'success');
+      // Clear both active filters before navigating so the duplicated note is
+      // always visible (it may not match the active query or tag filter).
+      // pageContainingNote fetches the fully unfiltered list, so clearing both
+      // filters ensures the displayed list matches the computed destination page.
+      if (query !== '') {
+        // Signal the debounce effect to skip its setPage(1) reset; onDuplicate
+        // will set the correct page directly after clearing the search.
+        skipDebouncePageResetRef.current = true;
+        setSearchInput('');
+        setQuery('');
+      }
+      if (tagFilter !== '') {
+        setTagFilter('');
+      }
+      // Navigate to the page where the duplicated note will appear.
+      // pageContainingNote fetches the full unfiltered list and finds the note
+      // by its unique id — correct for all sort orders including pinned-first.
+      const dest = await pageContainingNote(copy.id, sort);
+      if (page === dest && query === '' && tagFilter === '') {
+        await refresh(dest, '', '', sort);
       } else {
-        setPage(lastPage);
+        setPage(dest);
       }
     } catch (e: unknown) {
+      addToast('Failed to duplicate note', 'error');
       setError(e instanceof Error ? e.message : 'An unexpected error occurred');
     }
   }
