@@ -240,11 +240,4 @@ export class NoteStore {
     const start = (page - 1) * pageSize;
     return { items: all.slice(start, start + pageSize), total: all.length };
   }
-
-  /** Test-only: clear all notes and attachments and reset the id sequence. */
-  reset(): void {
-    this.notes.clear();
-    this.attachments.clear();
-    this.seq = 0;
-  }
 }
