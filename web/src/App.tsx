@@ -25,6 +25,7 @@ import {
   type SortOrder,
 } from './api';
 import { Button } from './components/Button';
+import { ConfirmDialog } from './ConfirmDialog';
 import { NoteBody } from './NoteBody';
 import { TagManager } from './TagManager';
 import { ToastContainer } from './ToastContainer';
@@ -76,6 +77,13 @@ export function App() {
   const [attachmentsOpen, setAttachmentsOpen] = useState<Record<string, boolean>>({});
   /** noteId → upload error string. */
   const [uploadError, setUploadError] = useState<Record<string, string | null>>({});
+  /**
+   * When non-null, the confirm dialog is open and this holds the id of the note
+   * pending deletion.
+   */
+  const [pendingDeleteId, setPendingDeleteId] = useState<string | null>(null);
+  /** Ref to the delete button that triggered the dialog; focus returns here on close. */
+  const deleteTriggerRef = useRef<HTMLButtonElement | null>(null);
   /** noteId → true while a drag is active over that note's dropzone. */
   const [dragOver, setDragOver] = useState<Record<string, boolean>>({});
 
@@ -266,19 +274,19 @@ export function App() {
     await uploadFiles(id, files);
   }
 
-  function onDragOver(id: string, e: DragEvent<HTMLDivElement>) {
+  function onDragOver(id: string, e: DragEvent<HTMLElement>) {
     e.preventDefault();
     e.stopPropagation();
     setDragOver((prev) => ({ ...prev, [id]: true }));
   }
 
-  function onDragLeave(id: string, e: DragEvent<HTMLDivElement>) {
+  function onDragLeave(id: string, e: DragEvent<HTMLElement>) {
     e.preventDefault();
     e.stopPropagation();
     setDragOver((prev) => ({ ...prev, [id]: false }));
   }
 
-  async function onDrop(id: string, e: DragEvent<HTMLDivElement>) {
+  async function onDrop(id: string, e: DragEvent<HTMLElement>) {
     e.preventDefault();
     e.stopPropagation();
     setDragOver((prev) => ({ ...prev, [id]: false }));
@@ -341,7 +349,26 @@ export function App() {
     }
   }
 
-  async function onDelete(id: string) {
+  /** Opens the confirm dialog for deleting a note. */
+  function onDeleteRequest(id: string, triggerEl: HTMLButtonElement) {
+    deleteTriggerRef.current = triggerEl;
+    setPendingDeleteId(id);
+  }
+
+  /** Cancels the confirm dialog without deleting anything. */
+  function onDeleteCancel() {
+    setPendingDeleteId(null);
+    deleteTriggerRef.current?.focus();
+    deleteTriggerRef.current = null;
+  }
+
+  /** Performs the actual deletion after the user confirmed. */
+  async function onDeleteConfirm() {
+    if (!pendingDeleteId) return;
+    const id = pendingDeleteId;
+    setPendingDeleteId(null);
+    deleteTriggerRef.current?.focus();
+    deleteTriggerRef.current = null;
     try {
       await deleteNote(id);
       setError(null);
@@ -526,21 +553,29 @@ export function App() {
               onChange={(e) => setTagsInput(e.target.value)}
             />
           </label>
-          <div className={styles.fieldLabel} role="group" aria-label="Color">
-            Color
+          <fieldset className={styles.fieldLabel}>
+            <legend>Color</legend>
             <div className={styles.colorPicker}>
-              {NOTE_COLORS.map((c) => (
-                <button
-                  key={c}
-                  type="button"
-                  aria-label={`Color ${c}`}
-                  aria-pressed={color === c}
-                  className={`${styles.colorSwatch} ${styles[`swatch-${c}`]} ${color === c ? styles.colorSwatchSelected : ''}`}
-                  onClick={() => setColor(c)}
-                />
-              ))}
+              {NOTE_COLORS.map((c) => {
+                const swatchKey = `swatch-${c}` as keyof typeof styles;
+                const swatchCls = [
+                  styles.colorSwatch,
+                  styles[swatchKey],
+                  color === c ? styles.colorSwatchSelected : '',
+                ].join(' ');
+                return (
+                  <button
+                    key={c}
+                    type="button"
+                    aria-label={`Color ${c}`}
+                    aria-pressed={color === c}
+                    className={swatchCls}
+                    onClick={() => setColor(c)}
+                  />
+                );
+              })}
             </div>
-          </div>
+          </fieldset>
           <div className={styles.formActions}>
             <Button type="submit" variant="primary">
               Add note
@@ -616,21 +651,29 @@ export function App() {
                       onChange={(e) => setEditTagsInput(e.target.value)}
                     />
                   </label>
-                  <div className={styles.fieldLabel} role="group" aria-label="Edit color">
-                    Color
+                  <fieldset className={styles.fieldLabel}>
+                    <legend>Edit color</legend>
                     <div className={styles.colorPicker}>
-                      {NOTE_COLORS.map((c) => (
-                        <button
-                          key={c}
-                          type="button"
-                          aria-label={`Color ${c}`}
-                          aria-pressed={editColor === c}
-                          className={`${styles.colorSwatch} ${styles[`swatch-${c}`]} ${editColor === c ? styles.colorSwatchSelected : ''}`}
-                          onClick={() => setEditColor(c)}
-                        />
-                      ))}
+                      {NOTE_COLORS.map((c) => {
+                        const swatchKey = `swatch-${c}` as keyof typeof styles;
+                        const editSwatchCls = [
+                          styles.colorSwatch,
+                          styles[swatchKey],
+                          editColor === c ? styles.colorSwatchSelected : '',
+                        ].join(' ');
+                        return (
+                          <button
+                            key={c}
+                            type="button"
+                            aria-label={`Color ${c}`}
+                            aria-pressed={editColor === c}
+                            className={editSwatchCls}
+                            onClick={() => setEditColor(c)}
+                          />
+                        );
+                      })}
                     </div>
-                  </div>
+                  </fieldset>
                   <div className={styles.noteActions}>
                     <Button variant="primary" onClick={() => void onEditSave(n.id)}>
                       Save
@@ -644,7 +687,10 @@ export function App() {
             ) : (
               <li
                 key={n.id}
-                className={`${styles.noteCard} ${n.color !== 'none' ? styles[`card-${n.color}`] : ''}`}
+                className={[
+                  styles.noteCard,
+                  n.color === 'none' ? '' : styles[`card-${n.color}` as keyof typeof styles],
+                ].join(' ')}
                 data-color={n.color}
               >
                 <div className={styles.noteHeader}>
@@ -694,7 +740,7 @@ export function App() {
                   <Button
                     variant="danger"
                     aria-label={`Delete ${n.title}`}
-                    onClick={() => void onDelete(n.id)}
+                    onClick={(e) => onDeleteRequest(n.id, e.currentTarget)}
                   >
                     Delete
                   </Button>
@@ -728,8 +774,7 @@ export function App() {
                       </p>
                     )}
                     {/* Drag-and-drop dropzone */}
-                    <div
-                      role="region"
+                    <section
                       aria-label={`Drop files here to attach to ${n.title}`}
                       className={`${styles.dropzone} ${dragOver[n.id] ? styles.dropzoneActive : ''}`}
                       onDragOver={(e) => onDragOver(n.id, e)}
@@ -739,7 +784,7 @@ export function App() {
                       <span className={styles.dropzoneHint}>
                         Drag &amp; drop files here, or use the button below
                       </span>
-                    </div>
+                    </section>
                     <label className={styles.attachmentUpload}>
                       Attach files
                       <input
@@ -808,6 +853,15 @@ export function App() {
         </Button>
       </nav>
       <ToastContainer toasts={toasts} onDismiss={dismissToast} />
+      {pendingDeleteId !== null && (
+        <ConfirmDialog
+          title="Delete note"
+          message={`Delete "${notes.find((n) => n.id === pendingDeleteId)?.title ?? 'this note'}"? This cannot be undone.`}
+          confirmLabel="Delete"
+          onConfirm={() => void onDeleteConfirm()}
+          onCancel={onDeleteCancel}
+        />
+      )}
     </main>
   );
 }
