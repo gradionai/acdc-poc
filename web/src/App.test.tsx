@@ -754,7 +754,7 @@ describe('App', () => {
     // pageContainingNote makes two async fetches before setPage — allow extra
     // time so the assertion does not flake on slow CI runners.
     await waitFor(() => expect(screen.getByText('Zebra')).toBeInTheDocument(), {
-      timeout: 5000,
+      timeout: 10000,
     });
     // Apple (page 1) should no longer be visible
     expect(screen.queryByText('Apple')).not.toBeInTheDocument();
