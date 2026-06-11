@@ -13,6 +13,7 @@ import {
   type Note,
 } from './api';
 import { Button } from './components/Button';
+import { NoteBody } from './NoteBody';
 import { ToastContainer } from './ToastContainer';
 import { useTheme } from './useTheme';
 import { useToast } from './useToast';
@@ -397,7 +398,7 @@ export function App() {
                   </span>
                 )}
               </div>
-              <p className={styles.noteBody}>{n.body}</p>
+              <NoteBody body={n.body} className={styles.noteBody} />
               {n.tags.length > 0 && (
                 <div className={styles.tagList} aria-label="Tags">
                   {n.tags.map((tag) => (
