@@ -1,5 +1,5 @@
 import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
-import { render, screen, waitFor, fireEvent } from '@testing-library/react';
+import { render, screen, waitFor, fireEvent, act } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { App } from './App';
 import { listNotes, type NoteColor } from './api';
@@ -287,6 +287,29 @@ describe('App', () => {
     expect(screen.getByText('Escape test note')).toBeInTheDocument();
   });
 
+  it('pressing Escape in the confirm dialog cancels AND restores focus to the delete trigger', async () => {
+    render(<App />);
+    await userEvent.type(screen.getByLabelText(/title/i), 'Focus restore note');
+    await userEvent.type(screen.getByLabelText(/body/i), 'body');
+    await userEvent.click(screen.getByRole('button', { name: /add note/i }));
+    await waitFor(() => expect(screen.getByText('Focus restore note')).toBeInTheDocument());
+
+    // Click the delete button — this is the trigger element focus must return to.
+    const deleteBtn = screen.getByRole('button', { name: /^delete focus restore note$/i });
+    await userEvent.click(deleteBtn);
+    expect(screen.getByRole('dialog')).toBeInTheDocument();
+
+    // Press Escape to cancel.
+    await userEvent.keyboard('{Escape}');
+
+    // Dialog should be gone.
+    expect(screen.queryByRole('dialog')).not.toBeInTheDocument();
+    // Note still present (not deleted).
+    expect(screen.getByText('Focus restore note')).toBeInTheDocument();
+    // Focus must have returned to the delete trigger, not been blurred.
+    expect(deleteBtn).toHaveFocus();
+  });
+
   it('confirm dialog names the note being deleted', async () => {
     render(<App />);
     await userEvent.type(screen.getByLabelText(/title/i), 'My named note');
@@ -535,7 +558,11 @@ describe('App', () => {
     await userEvent.click(screen.getByRole('button', { name: /add note/i }));
 
     // App must navigate to page 1 where the new note appears first
-    await waitFor(() => expect(screen.getByText('Sixth note')).toBeInTheDocument());
+    // pageContainingNote makes two async fetches before setPage/refresh — allow
+    // extra time so the assertion does not flake on slow CI runners.
+    await waitFor(() => expect(screen.getByText('Sixth note')).toBeInTheDocument(), {
+      timeout: 5000,
+    });
   });
 
   it('new note is visible after create — oldest sort lands on the last page', async () => {
@@ -604,7 +631,11 @@ describe('App', () => {
     await userEvent.click(screen.getByRole('button', { name: /add note/i }));
 
     // App must navigate to page 2 where the new note is visible
-    await waitFor(() => expect(screen.getByText('Seventh note')).toBeInTheDocument());
+    // pageContainingNote makes two async fetches before setPage — allow extra
+    // time so the assertion does not flake on slow CI runners.
+    await waitFor(() => expect(screen.getByText('Seventh note')).toBeInTheDocument(), {
+      timeout: 5000,
+    });
     // Page 1 notes (oldest) should no longer be shown
     expect(screen.queryByText('OldSort 1')).not.toBeInTheDocument();
   });
@@ -714,7 +745,11 @@ describe('App', () => {
     await userEvent.click(screen.getByRole('button', { name: /add note/i }));
 
     // App must navigate to page 2 where Zebra appears
-    await waitFor(() => expect(screen.getByText('Zebra')).toBeInTheDocument());
+    // pageContainingNote makes two async fetches before setPage — allow extra
+    // time so the assertion does not flake on slow CI runners.
+    await waitFor(() => expect(screen.getByText('Zebra')).toBeInTheDocument(), {
+      timeout: 5000,
+    });
     // Apple (page 1) should no longer be visible
     expect(screen.queryByText('Apple')).not.toBeInTheDocument();
   });
@@ -1829,9 +1864,15 @@ describe('App — title-sort create with duplicate titles', () => {
 
     // The app must navigate to the page that contains the new "Zebra" note
     // (page 2 under title sort). Apple (page 1) must no longer be visible.
-    await waitFor(() => expect(screen.queryByText('Apple')).not.toBeInTheDocument());
+    // pageContainingNote makes two async fetches before setPage — allow extra
+    // time so the assertion does not flake on slow CI runners.
+    await waitFor(() => expect(screen.queryByText('Apple')).not.toBeInTheDocument(), {
+      timeout: 5000,
+    });
     // At least one "Zebra" is visible (both sort adjacently on page 2)
-    await waitFor(() => expect(screen.getAllByText('Zebra').length).toBeGreaterThan(0));
+    await waitFor(() => expect(screen.getAllByText('Zebra').length).toBeGreaterThan(0), {
+      timeout: 5000,
+    });
   });
 });
 
@@ -2145,7 +2186,11 @@ describe('App — create with pinned notes', () => {
     // Must navigate to page 3 — not page 2 (what an "oldest→last page" shortcut would compute)
     // "last page" shortcut: ceil(11/5)=3 — actually the same here, but the route through
     // the fetch-and-find is what we're testing. Either way the unpinned note is on page 3.
-    await waitFor(() => expect(screen.getByText('New unpinned oldest')).toBeInTheDocument());
+    // pageContainingNote makes two async fetches before setPage — allow extra
+    // time so the assertion does not flake on slow CI runners.
+    await waitFor(() => expect(screen.getByText('New unpinned oldest')).toBeInTheDocument(), {
+      timeout: 5000,
+    });
     // Next button disabled confirms we are on the last page
     expect(screen.getByRole('button', { name: /next/i })).toBeDisabled();
   });
@@ -2231,5 +2276,152 @@ describe('App — create and duplicate with both query and tag filter active', (
     expect(screen.getByRole('textbox', { name: /filter by tag/i })).toHaveValue('');
     // On the last page (6 total, page 2 shows the copy)
     expect(screen.getByRole('button', { name: /next/i })).toBeDisabled();
+  });
+});
+
+describe('App — keyboard shortcuts', () => {
+  beforeEach(() => mockFetchSequence());
+
+  function pressKey(
+    key: string,
+    target: Element = document.body,
+    modifiers: { ctrlKey?: boolean; metaKey?: boolean; altKey?: boolean } = {},
+  ) {
+    fireEvent.keyDown(target, { key, bubbles: true, cancelable: true, ...modifiers });
+  }
+
+  it('pressing "n" outside a text field focuses the new-note title input', async () => {
+    // jsdom does not implement scrollIntoView; stub it to prevent unhandled errors.
+    window.HTMLElement.prototype.scrollIntoView = vi.fn();
+
+    render(<App />);
+    // Wait for initial render
+    await waitFor(() => expect(screen.getByLabelText(/^title$/i)).toBeInTheDocument());
+
+    act(() => {
+      pressKey('n');
+    });
+
+    await waitFor(() => expect(screen.getByLabelText(/^title$/i)).toHaveFocus());
+  });
+
+  it('pressing "/" outside a text field focuses the search input', async () => {
+    render(<App />);
+    await waitFor(() =>
+      expect(screen.getByRole('textbox', { name: /search notes/i })).toBeInTheDocument(),
+    );
+
+    act(() => {
+      pressKey('/');
+    });
+
+    await waitFor(() =>
+      expect(screen.getByRole('textbox', { name: /search notes/i })).toHaveFocus(),
+    );
+  });
+
+  it('pressing "?" opens the keyboard shortcuts help panel', async () => {
+    render(<App />);
+    await waitFor(() =>
+      expect(screen.getByLabelText('Show keyboard shortcuts')).toBeInTheDocument(),
+    );
+
+    act(() => {
+      pressKey('?');
+    });
+
+    await waitFor(() =>
+      expect(screen.getByRole('dialog', { name: /keyboard shortcuts/i })).toBeInTheDocument(),
+    );
+  });
+
+  it('pressing "?" again closes the help panel', async () => {
+    render(<App />);
+    await waitFor(() =>
+      expect(screen.getByLabelText('Show keyboard shortcuts')).toBeInTheDocument(),
+    );
+
+    act(() => {
+      pressKey('?');
+    });
+    await waitFor(() =>
+      expect(screen.getByRole('dialog', { name: /keyboard shortcuts/i })).toBeInTheDocument(),
+    );
+
+    act(() => {
+      pressKey('?');
+    });
+    await waitFor(() =>
+      expect(screen.queryByRole('dialog', { name: /keyboard shortcuts/i })).not.toBeInTheDocument(),
+    );
+  });
+
+  it('pressing Escape closes the help panel when it is open', async () => {
+    render(<App />);
+    await waitFor(() =>
+      expect(screen.getByLabelText('Show keyboard shortcuts')).toBeInTheDocument(),
+    );
+
+    // Open help panel
+    act(() => {
+      pressKey('?');
+    });
+    await waitFor(() =>
+      expect(screen.getByRole('dialog', { name: /keyboard shortcuts/i })).toBeInTheDocument(),
+    );
+
+    // Close with Escape
+    act(() => {
+      pressKey('Escape');
+    });
+    await waitFor(() =>
+      expect(screen.queryByRole('dialog', { name: /keyboard shortcuts/i })).not.toBeInTheDocument(),
+    );
+  });
+
+  it('pressing Escape while editing a note cancels the edit', async () => {
+    render(<App />);
+
+    // Create a note
+    await userEvent.type(screen.getByLabelText(/^title$/i), 'Edit me');
+    await userEvent.type(screen.getByLabelText(/^body$/i), 'some body');
+    await userEvent.click(screen.getByRole('button', { name: /add note/i }));
+    await waitFor(() => expect(screen.getByText('Edit me')).toBeInTheDocument());
+
+    // Open inline editor
+    await userEvent.click(screen.getByRole('button', { name: /edit edit me/i }));
+    expect(screen.getByRole('textbox', { name: /edit title/i })).toBeInTheDocument();
+
+    // Press Escape to cancel edit
+    act(() => {
+      pressKey('Escape');
+    });
+
+    await waitFor(() =>
+      expect(screen.queryByRole('textbox', { name: /edit title/i })).not.toBeInTheDocument(),
+    );
+    // The note should still be visible (edit was cancelled, not saved)
+    expect(screen.getByText('Edit me')).toBeInTheDocument();
+  });
+
+  it('pressing Escape when no modal is open blurs the active element', async () => {
+    render(<App />);
+    await waitFor(() =>
+      expect(screen.getByRole('textbox', { name: /search notes/i })).toBeInTheDocument(),
+    );
+
+    // Focus the search input
+    const searchInput = screen.getByRole('textbox', { name: /search notes/i });
+    act(() => {
+      searchInput.focus();
+    });
+    expect(searchInput).toHaveFocus();
+
+    // Press Escape — should blur the search input
+    act(() => {
+      pressKey('Escape', searchInput);
+    });
+
+    await waitFor(() => expect(searchInput).not.toHaveFocus());
   });
 });

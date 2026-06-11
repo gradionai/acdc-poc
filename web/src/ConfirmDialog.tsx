@@ -90,7 +90,13 @@ export function ConfirmDialog({
       data-testid="confirm-dialog-backdrop"
       onClick={handleBackdropClick}
       onKeyDown={(e) => {
-        if (e.key === 'Escape') onCancel();
+        if (e.key === 'Escape') {
+          // Stop the event from reaching the global document-level shortcut
+          // handler, which would blur the delete trigger that onCancel just
+          // re-focused.
+          e.stopPropagation();
+          onCancel();
+        }
       }}
       open
     >

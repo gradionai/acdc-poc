@@ -1,4 +1,5 @@
 import {
+  useCallback,
   useEffect,
   useRef,
   useState,
@@ -32,6 +33,7 @@ import { ToastContainer } from './ToastContainer';
 import { useTheme } from './useTheme';
 import { countWords, countChars } from './wordCount';
 import { useToast } from './useToast';
+import { useKeyboardShortcuts, SHORTCUTS } from './useKeyboardShortcuts';
 import styles from './App.module.css';
 
 const PAGE_SIZE = 5;
@@ -77,6 +79,17 @@ export function App() {
   const [attachmentsOpen, setAttachmentsOpen] = useState<Record<string, boolean>>({});
   /** noteId → upload error string. */
   const [uploadError, setUploadError] = useState<Record<string, string | null>>({});
+  /** Whether the keyboard shortcut help panel is open. */
+  const [showHelp, setShowHelp] = useState(false);
+
+  /** Ref to the new-note title input — used by the `n` shortcut. */
+  const newNoteTitleRef = useRef<HTMLInputElement>(null);
+  /** Ref to the search input — used by the `/` shortcut. */
+  const searchInputRef = useRef<HTMLInputElement>(null);
+  /** Ref to the help-toggle button — focus is restored here when the panel closes. */
+  const helpToggleRef = useRef<HTMLButtonElement>(null);
+  /** Ref to the help panel's close button — focused when the panel opens. */
+  const helpCloseBtnRef = useRef<HTMLButtonElement>(null);
   /**
    * When non-null, the confirm dialog is open and this holds the id of the note
    * pending deletion.
@@ -98,9 +111,6 @@ export function App() {
   // debounce effect skips its `setPage(1)` reset (onSubmit controls the page
   // directly in that case).
   const skipDebouncePageResetRef = useRef(false);
-
-  // Ref for the title input so the empty-state CTA can focus it idiomatically.
-  const titleInputRef = useRef<HTMLInputElement>(null);
 
   const totalPages = Math.max(1, Math.ceil(total / PAGE_SIZE));
 
@@ -151,10 +161,16 @@ export function App() {
    * shortcuts are wrong when pinned notes occupy the first page(s).
    */
   async function pageContainingNote(id: string, s: typeof sort): Promise<number> {
-    // Fetch the full unfiltered list (no query, no tag filter) under the given sort.
-    // A large pageSize ensures all notes are returned in a single request.
-    const fullPage = await listNotes(1, 10_000, '', '', s);
-    const index = fullPage.notes.findIndex((n) => n.id === id);
+    // First request discovers the real total; if the list fits within one page
+    // we can resolve immediately. Otherwise fetch the exact number of notes so
+    // we never silently miss notes beyond an arbitrary ceiling.
+    const first = await listNotes(1, PAGE_SIZE, '', '', s);
+    if (first.total <= PAGE_SIZE) {
+      const i = first.notes.findIndex((n) => n.id === id);
+      return i >= 0 ? Math.floor(i / PAGE_SIZE) + 1 : 1;
+    }
+    const full = await listNotes(1, first.total, '', '', s);
+    const index = full.notes.findIndex((n) => n.id === id);
     return index >= 0 ? Math.floor(index / PAGE_SIZE) + 1 : 1;
   }
 
@@ -422,6 +438,55 @@ export function App() {
     }
   }
 
+  const shortcutHandlers = {
+    onNewNote: useCallback(() => {
+      newNoteTitleRef.current?.scrollIntoView({ behavior: 'smooth', block: 'center' });
+      newNoteTitleRef.current?.focus();
+    }, []),
+    onFocusSearch: useCallback(() => {
+      searchInputRef.current?.focus();
+      searchInputRef.current?.select();
+    }, []),
+    onEscape: useCallback(() => {
+      // When the delete-confirm dialog is open, its own onKeyDown handler fires
+      // first (React delegation, descendant before document) and calls onCancel,
+      // which restores focus to the delete trigger.  The global handler must not
+      // blur that just-restored focus, so we defer entirely to the dialog.
+      if (pendingDeleteId !== null) {
+        return;
+      }
+      if (showHelp) {
+        setShowHelp(false);
+        return;
+      }
+      if (editingId !== null) {
+        setEditingId(null);
+        setEditTitle('');
+        setEditBody('');
+        setEditTagsInput('');
+        return;
+      }
+      if (document.activeElement instanceof HTMLElement) {
+        document.activeElement.blur();
+      }
+    }, [pendingDeleteId, showHelp, editingId]),
+    onToggleHelp: useCallback(() => setShowHelp((prev) => !prev), []),
+  };
+
+  useKeyboardShortcuts(shortcutHandlers);
+
+  // Move focus into the help dialog when it opens; restore to the toggle button on close.
+  const prevShowHelpRef = useRef(false);
+  useEffect(() => {
+    if (showHelp) {
+      helpCloseBtnRef.current?.focus();
+    } else if (prevShowHelpRef.current) {
+      // Only restore focus when the panel was previously open (not on initial mount).
+      helpToggleRef.current?.focus();
+    }
+    prevShowHelpRef.current = showHelp;
+  }, [showHelp]);
+
   // True when there are no notes to show AND no filter is active — i.e. the
   // store is genuinely empty (not just "no results for this search").
   const isFilterActive = query !== '' || tagFilter !== '';
@@ -432,6 +497,15 @@ export function App() {
       <header className={styles.pageHeader}>
         <h1 className={styles.pageTitle}>Notes</h1>
         <div className={styles.headerActions}>
+          <button
+            ref={helpToggleRef}
+            aria-label="Show keyboard shortcuts"
+            aria-pressed={showHelp}
+            className={styles.iconButton}
+            onClick={() => setShowHelp((prev) => !prev)}
+          >
+            ?
+          </button>
           <Button
             variant="secondary"
             onClick={() => setShowTagManager((v) => !v)}
@@ -449,6 +523,35 @@ export function App() {
           </button>
         </div>
       </header>
+
+      {showHelp && (
+        <div
+          role="dialog"
+          aria-label="Keyboard shortcuts"
+          aria-modal="true"
+          className={styles.helpPanel}
+        >
+          <div className={styles.helpPanelHeader}>
+            <h2 className={styles.helpPanelTitle}>Keyboard shortcuts</h2>
+            <button
+              ref={helpCloseBtnRef}
+              aria-label="Close keyboard shortcuts"
+              className={styles.iconButton}
+              onClick={() => setShowHelp(false)}
+            >
+              ✕
+            </button>
+          </div>
+          <ul className={styles.shortcutList}>
+            {SHORTCUTS.map(({ key, description }) => (
+              <li key={key} className={styles.shortcutItem}>
+                <kbd className={styles.kbd}>{key}</kbd>
+                <span>{description}</span>
+              </li>
+            ))}
+          </ul>
+        </div>
+      )}
       {error && (
         <div role="alert" className={styles.errorBanner}>
           <span className={styles.errorMessage}>{error}</span>
@@ -470,6 +573,7 @@ export function App() {
         <label className={styles.fieldLabel}>
           Search
           <input
+            ref={searchInputRef}
             className={styles.input}
             aria-label="Search notes"
             placeholder="Search notes…"
@@ -525,7 +629,7 @@ export function App() {
           <label className={styles.fieldLabel}>
             Title
             <input
-              ref={titleInputRef}
+              ref={newNoteTitleRef}
               className={styles.input}
               value={title}
               onChange={(e) => setTitle(e.target.value)}
@@ -606,7 +710,7 @@ export function App() {
               <p>No notes yet. Create your first note above!</p>
               <Button
                 variant="primary"
-                onClick={() => titleInputRef.current?.focus()}
+                onClick={() => newNoteTitleRef.current?.focus()}
                 aria-label="Add your first note"
               >
                 Add your first note
