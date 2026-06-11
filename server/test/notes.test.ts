@@ -228,4 +228,42 @@ describe('notes API', () => {
     expect(res.body).toHaveLength(1);
     expect((res.body as Array<{ title: string }>)[0].title).toBe('tagged');
   });
+
+  it('trims whitespace from tags before persisting', async () => {
+    const app = createApp();
+    const res = await request(app)
+      .post('/api/notes')
+      .send({ title: 't', body: 'b', tags: [' work ', '  alpha  '] })
+      .expect(201);
+    expect(res.body.tags).toEqual(['work', 'alpha']);
+  });
+
+  it('deduplicates tags before persisting', async () => {
+    const app = createApp();
+    const res = await request(app)
+      .post('/api/notes')
+      .send({ title: 't', body: 'b', tags: ['alpha', 'beta', 'alpha'] })
+      .expect(201);
+    expect(res.body.tags).toEqual(['alpha', 'beta']);
+  });
+
+  it('trims stored tags so ?tag= filter matches', async () => {
+    const app = createApp();
+    await request(app)
+      .post('/api/notes')
+      .send({ title: 'padded', body: 'b', tags: [' work '] })
+      .expect(201);
+    const res = await request(app).get('/api/notes?tag=work').expect(200);
+    expect(res.headers['x-total-count']).toBe('1');
+    expect((res.body as Array<{ title: string }>)[0].title).toBe('padded');
+  });
+
+  it('rejects create with tags containing whitespace-only strings', async () => {
+    const app = createApp();
+    const res = await request(app)
+      .post('/api/notes')
+      .send({ title: 't', body: 'b', tags: ['valid', '   '] })
+      .expect(400);
+    expect(res.body).toEqual({ error: 'tags must be an array of non-empty strings' });
+  });
 });

@@ -417,6 +417,23 @@ describe('App — tags', () => {
   });
 });
 
+describe('App — tag deduplication', () => {
+  beforeEach(() => mockFetchSequence());
+
+  it('deduplicates tags before sending to server', async () => {
+    render(<App />);
+    await userEvent.type(screen.getByLabelText(/^title$/i), 'Dup tag note');
+    await userEvent.type(screen.getByLabelText(/^body$/i), 'body');
+    await userEvent.type(screen.getByRole('textbox', { name: /^tags$/i }), 'alpha, beta, alpha');
+    await userEvent.click(screen.getByRole('button', { name: /add note/i }));
+
+    // Only two distinct tags should appear in the rendered note — no duplicate spans
+    await waitFor(() => expect(screen.getByText('Dup tag note')).toBeInTheDocument());
+    const tagSpans = screen.getAllByText('alpha');
+    expect(tagSpans).toHaveLength(1);
+  });
+});
+
 describe('listNotes — X-Total-Count validation', () => {
   it('returns total=0 when X-Total-Count header is missing', async () => {
     vi.stubGlobal(

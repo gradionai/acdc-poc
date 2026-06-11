@@ -4,12 +4,16 @@ import { createNote, deleteNote, listNotes, updateNote, type Note } from './api'
 const PAGE_SIZE = 5;
 const SEARCH_DEBOUNCE_MS = 300;
 
-/** Parse a comma-separated string into a trimmed, non-empty string array. */
+/** Parse a comma-separated string into a trimmed, non-empty, deduplicated string array. */
 function parseTags(raw: string): string[] {
-  return raw
-    .split(',')
-    .map((t) => t.trim())
-    .filter((t) => t !== '');
+  return [
+    ...new Set(
+      raw
+        .split(',')
+        .map((t) => t.trim())
+        .filter((t) => t !== ''),
+    ),
+  ];
 }
 
 export function App() {

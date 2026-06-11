@@ -9,10 +9,14 @@ function parsePositiveInt(value: unknown, fallback: number): number {
 function parseTags(value: unknown): string[] | null {
   if (value === undefined) return [];
   if (!Array.isArray(value)) return null;
+  const normalized: string[] = [];
   for (const item of value) {
-    if (typeof item !== 'string' || item.trim() === '') return null;
+    if (typeof item !== 'string') return null;
+    const trimmed = item.trim();
+    if (trimmed === '') return null;
+    normalized.push(trimmed);
   }
-  return value as string[];
+  return [...new Set(normalized)];
 }
 
 export function createNotesRouter(store: NoteStore): Router {
