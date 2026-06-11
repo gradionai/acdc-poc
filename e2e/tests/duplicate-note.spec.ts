@@ -1,4 +1,4 @@
-import { test, expect } from '../fixtures';
+import { test, expect, openOverflowMenu } from '../fixtures';
 
 test('duplicate a note — two notes with similar titles, editing one does not affect the other', async ({
   page,
@@ -17,8 +17,9 @@ test('duplicate a note — two notes with similar titles, editing one does not a
   const item = page.getByRole('listitem').filter({ hasText: title });
   await expect(item).toBeVisible();
 
-  // Duplicate the note
-  await item.getByRole('button', { name: /^duplicate /i }).click();
+  // Duplicate the note via overflow menu
+  await openOverflowMenu(item);
+  await item.getByRole('menuitem', { name: /^duplicate /i }).click();
 
   // Both the original and the copy should appear
   const originalItem = page.getByRole('listitem').filter({ hasText: title }).filter({

@@ -1,4 +1,4 @@
-import { test, expect } from '../fixtures';
+import { test, expect, openOverflowMenu } from '../fixtures';
 
 test('create then delete a note via confirm dialog', async ({ page }) => {
   // Unique per run so a leftover note from an interrupted local re-run (the store
@@ -16,8 +16,9 @@ test('create then delete a note via confirm dialog', async ({ page }) => {
   const item = page.getByRole('listitem').filter({ hasText: title });
   await expect(item).toBeVisible();
 
-  // Click Delete — a confirmation dialog should appear.
-  await item.getByRole('button', { name: /delete/i }).click();
+  // Open the overflow menu, then click Delete — a confirmation dialog should appear.
+  await openOverflowMenu(item);
+  await item.getByRole('menuitem', { name: /delete/i }).click();
   const dialog = page.getByRole('dialog');
   await expect(dialog).toBeVisible();
 
@@ -39,8 +40,9 @@ test('cancel in confirm dialog does not delete the note', async ({ page }) => {
   const item = page.getByRole('listitem').filter({ hasText: title });
   await expect(item).toBeVisible();
 
-  // Click Delete — confirm dialog opens.
-  await item.getByRole('button', { name: /^delete cancel-delete note/i }).click();
+  // Open overflow menu then click Delete — confirm dialog opens.
+  await openOverflowMenu(item);
+  await item.getByRole('menuitem', { name: new RegExp(`^delete cancel-delete note`, 'i') }).click();
   const dialog = page.getByRole('dialog');
   await expect(dialog).toBeVisible();
 

@@ -244,8 +244,9 @@ describe('App', () => {
     await userEvent.click(screen.getByRole('button', { name: /add note/i }));
     await waitFor(() => expect(screen.getByText('Temp note')).toBeInTheDocument());
 
-    // Click delete — a confirm dialog should appear.
-    await userEvent.click(screen.getByRole('button', { name: /^delete temp note$/i }));
+    // Open overflow menu then click Delete — a confirm dialog should appear.
+    await userEvent.click(screen.getByRole('button', { name: /more actions/i }));
+    await userEvent.click(screen.getByRole('menuitem', { name: /^delete temp note$/i }));
     expect(screen.getByRole('dialog')).toBeInTheDocument();
 
     // Confirm deletion in the dialog.
@@ -260,8 +261,9 @@ describe('App', () => {
     await userEvent.click(screen.getByRole('button', { name: /add note/i }));
     await waitFor(() => expect(screen.getByText('Keep me note')).toBeInTheDocument());
 
-    // Click delete — dialog opens.
-    await userEvent.click(screen.getByRole('button', { name: /^delete keep me note$/i }));
+    // Open overflow menu then click Delete — dialog opens.
+    await userEvent.click(screen.getByRole('button', { name: /more actions/i }));
+    await userEvent.click(screen.getByRole('menuitem', { name: /^delete keep me note$/i }));
     expect(screen.getByRole('dialog')).toBeInTheDocument();
 
     // Click cancel — note should still be present and dialog should be gone.
@@ -277,8 +279,9 @@ describe('App', () => {
     await userEvent.click(screen.getByRole('button', { name: /add note/i }));
     await waitFor(() => expect(screen.getByText('Escape test note')).toBeInTheDocument());
 
-    // Open dialog.
-    await userEvent.click(screen.getByRole('button', { name: /^delete escape test note$/i }));
+    // Open overflow menu, then open dialog.
+    await userEvent.click(screen.getByRole('button', { name: /more actions/i }));
+    await userEvent.click(screen.getByRole('menuitem', { name: /^delete escape test note$/i }));
     expect(screen.getByRole('dialog')).toBeInTheDocument();
 
     // Press Escape to cancel.
@@ -294,9 +297,11 @@ describe('App', () => {
     await userEvent.click(screen.getByRole('button', { name: /add note/i }));
     await waitFor(() => expect(screen.getByText('Focus restore note')).toBeInTheDocument());
 
-    // Click the delete button — this is the trigger element focus must return to.
-    const deleteBtn = screen.getByRole('button', { name: /^delete focus restore note$/i });
-    await userEvent.click(deleteBtn);
+    // Open the overflow menu. The "More actions" button is the focus-return target
+    // (the delete menuitem is removed from DOM when the menu closes).
+    const overflowBtn = screen.getByRole('button', { name: /more actions/i });
+    await userEvent.click(overflowBtn);
+    await userEvent.click(screen.getByRole('menuitem', { name: /^delete focus restore note$/i }));
     expect(screen.getByRole('dialog')).toBeInTheDocument();
 
     // Press Escape to cancel.
@@ -306,8 +311,8 @@ describe('App', () => {
     expect(screen.queryByRole('dialog')).not.toBeInTheDocument();
     // Note still present (not deleted).
     expect(screen.getByText('Focus restore note')).toBeInTheDocument();
-    // Focus must have returned to the delete trigger, not been blurred.
-    expect(deleteBtn).toHaveFocus();
+    // Focus must have returned to the overflow trigger (the "More actions" button).
+    expect(overflowBtn).toHaveFocus();
   });
 
   it('confirm dialog names the note being deleted', async () => {
@@ -317,7 +322,8 @@ describe('App', () => {
     await userEvent.click(screen.getByRole('button', { name: /add note/i }));
     await waitFor(() => expect(screen.getByText('My named note')).toBeInTheDocument());
 
-    await userEvent.click(screen.getByRole('button', { name: /^delete my named note$/i }));
+    await userEvent.click(screen.getByRole('button', { name: /more actions/i }));
+    await userEvent.click(screen.getByRole('menuitem', { name: /^delete my named note$/i }));
     const dialog = screen.getByRole('dialog');
     expect(dialog.textContent).toMatch(/My named note/);
   });
@@ -1613,7 +1619,9 @@ describe('App — duplicate', () => {
     await userEvent.click(screen.getByRole('button', { name: /add note/i }));
     await waitFor(() => expect(screen.getByText('Dup me')).toBeInTheDocument());
 
-    expect(screen.getByRole('button', { name: /duplicate dup me/i })).toBeInTheDocument();
+    // Duplicate is in the overflow menu — open it and verify the menuitem is present.
+    await userEvent.click(screen.getByRole('button', { name: /more actions/i }));
+    expect(screen.getByRole('menuitem', { name: /duplicate dup me/i })).toBeInTheDocument();
   });
 
   it('clicking Duplicate creates a copy with prefixed title in the list', async () => {
@@ -1623,7 +1631,8 @@ describe('App — duplicate', () => {
     await userEvent.click(screen.getByRole('button', { name: /add note/i }));
     await waitFor(() => expect(screen.getByText('Original note')).toBeInTheDocument());
 
-    await userEvent.click(screen.getByRole('button', { name: /duplicate original note/i }));
+    await userEvent.click(screen.getByRole('button', { name: /more actions/i }));
+    await userEvent.click(screen.getByRole('menuitem', { name: /duplicate original note/i }));
     await waitFor(() => expect(screen.getByText('Copy of Original note')).toBeInTheDocument());
   });
 
@@ -1634,7 +1643,8 @@ describe('App — duplicate', () => {
     await userEvent.click(screen.getByRole('button', { name: /add note/i }));
     await waitFor(() => expect(screen.getByText('Source')).toBeInTheDocument());
 
-    await userEvent.click(screen.getByRole('button', { name: /duplicate source/i }));
+    await userEvent.click(screen.getByRole('button', { name: /more actions/i }));
+    await userEvent.click(screen.getByRole('menuitem', { name: /duplicate source/i }));
     await waitFor(() => expect(screen.getByText('Copy of Source')).toBeInTheDocument());
 
     // Edit the original
@@ -1946,8 +1956,11 @@ describe('App — duplicate sort-aware navigation', () => {
     // Default sort is newest; page 1 shows note id=5 (Elderberry) first
     await waitFor(() => expect(screen.getByText('Elderberry')).toBeInTheDocument());
 
-    // Duplicate the first note in the list (Elderberry has the highest id / newest)
-    await userEvent.click(screen.getByRole('button', { name: /duplicate elderberry/i }));
+    // Duplicate is in the overflow menu.
+    // Elderberry is the first card (newest sort, highest id).
+    const elderberryOverflowBtn = screen.getAllByRole('button', { name: /more actions/i })[0];
+    await userEvent.click(elderberryOverflowBtn);
+    await userEvent.click(screen.getByRole('menuitem', { name: /duplicate elderberry/i }));
 
     // Under newest sort the copy (id=6, highest createdAt) must sort first → page 1
     await waitFor(() => expect(screen.getByText('Copy of Elderberry')).toBeInTheDocument());
@@ -1966,7 +1979,10 @@ describe('App — duplicate sort-aware navigation', () => {
     expect(screen.queryByText('Elderberry')).toBeInTheDocument();
 
     // Duplicate Apple — under oldest sort, the copy (highest id) sorts last → last page
-    await userEvent.click(screen.getByRole('button', { name: /duplicate apple/i }));
+    // Apple is first card in oldest sort.
+    const appleOverflowBtn = screen.getAllByRole('button', { name: /more actions/i })[0];
+    await userEvent.click(appleOverflowBtn);
+    await userEvent.click(screen.getByRole('menuitem', { name: /duplicate apple/i }));
 
     // The copy sorts last under oldest → navigates to the last page
     await waitFor(() => expect(screen.getByText('Copy of Apple')).toBeInTheDocument());
@@ -1994,7 +2010,10 @@ describe('App — duplicate sort-aware navigation', () => {
     // Actually: "Copy of Banana".localeCompare order: Apple < Banana < Cherry < Copy of Banana < Date < Elderberry
     // Page 1 (5 notes): Apple, Banana, Cherry, Copy of Banana, Date
     // The app should navigate to the page containing "Copy of Banana".
-    await userEvent.click(screen.getByRole('button', { name: /duplicate banana/i }));
+    // Banana is second card in title sort (after Apple).
+    const bananaOverflowBtn = screen.getAllByRole('button', { name: /more actions/i })[1];
+    await userEvent.click(bananaOverflowBtn);
+    await userEvent.click(screen.getByRole('menuitem', { name: /duplicate banana/i }));
 
     await waitFor(() => expect(screen.getByText('Copy of Banana')).toBeInTheDocument());
   });
@@ -2031,7 +2050,9 @@ describe('App — duplicate sort-aware navigation', () => {
     // Duplicate Apple while the search is active.
     // The copy ("Copy of Apple") has the highest id and under oldest sort appears last.
     // With 6 total unfiltered notes across 2 pages (5+1), the copy is on page 2.
-    await userEvent.click(screen.getByRole('button', { name: /duplicate apple/i }));
+    // When search is active only Apple is visible — it's the first (and only) overflow btn.
+    await userEvent.click(screen.getByRole('button', { name: /more actions/i }));
+    await userEvent.click(screen.getByRole('menuitem', { name: /duplicate apple/i }));
 
     // Search should be cleared and the copy should be visible on the correct page.
     await waitFor(() => expect(screen.getByText('Copy of Apple')).toBeInTheDocument());
@@ -2264,7 +2285,9 @@ describe('App — create and duplicate with both query and tag filter active', (
     expect(screen.getByText('Apple')).toBeInTheDocument();
 
     // Duplicate Apple while both filters are active
-    await userEvent.click(screen.getByRole('button', { name: /duplicate apple/i }));
+    // When both filters are active only Apple is visible — one overflow button
+    await userEvent.click(screen.getByRole('button', { name: /more actions/i }));
+    await userEvent.click(screen.getByRole('menuitem', { name: /duplicate apple/i }));
 
     // Both filters must be cleared and the copy must be visible on the correct page
     await waitFor(() => expect(screen.getByText('Copy of Apple')).toBeInTheDocument());

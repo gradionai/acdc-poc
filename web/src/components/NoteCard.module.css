@@ -25,12 +25,13 @@
 
 .noteHeader {
   display: flex;
-  align-items: baseline;
+  align-items: center;
   gap: var(--space-2);
   margin-bottom: var(--space-2);
 }
 
 .noteTitle {
+  flex: 1;
   font-size: var(--font-size-base);
   font-weight: var(--font-weight-semibold);
   color: var(--color-text);
@@ -45,7 +46,10 @@
 }
 
 .pinnedBadge {
-  font-size: var(--font-size-xs);
+  display: inline-flex;
+  align-items: center;
+  color: var(--color-primary);
+  flex-shrink: 0;
 }
 
 /* ── Tag chips ───────────────────────────────────────────────── */
@@ -69,12 +73,116 @@
   letter-spacing: var(--letter-spacing-wide);
 }
 
-/* ── Note action buttons ──────────────────────────────────────── */
+/* ── Note action toolbar ─────────────────────────────────────── */
 
 .noteActions {
   display: flex;
-  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--space-1);
+  margin-top: var(--space-3);
+}
+
+/* ── Icon button ─────────────────────────────────────────────── */
+
+.iconBtn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+
+  /* WCAG 2.5.5 minimum touch target */
+  min-width: 32px;
+  min-height: 32px;
+  padding: var(--space-1);
+
+  background-color: transparent;
+  border: 1px solid transparent;
+  border-radius: var(--radius-base);
+  color: var(--color-text-muted);
+  cursor: pointer;
+  transition:
+    background-color 0.15s ease,
+    color 0.15s ease,
+    border-color 0.15s ease;
+}
+
+.iconBtn:hover {
+  background-color: var(--color-surface-raised);
+  border-color: var(--color-surface-border);
+  color: var(--color-text);
+}
+
+.iconBtn:focus-visible {
+  outline: none;
+  box-shadow: var(--shadow-focus);
+}
+
+.iconBtn:active {
+  background-color: var(--color-surface-border);
+}
+
+.iconBtnDanger {
+  color: var(--color-danger);
+}
+
+.iconBtnDanger:hover {
+  background-color: var(--color-alert-bg);
+  border-color: var(--color-alert-border);
+  color: var(--color-danger-hover);
+}
+
+/* ── Overflow ("⋯") menu wrapper + dropdown ──────────────────── */
+
+.overflowWrapper {
+  position: relative;
+  margin-left: auto; /* push to the right end of the action bar */
+}
+
+.overflowMenu {
+  position: absolute;
+  right: 0;
+  top: calc(100% + var(--space-1));
+  z-index: 100;
+  min-width: 10rem;
+  background-color: var(--color-surface);
+  border: 1px solid var(--color-surface-border);
+  border-radius: var(--radius-md);
+  box-shadow: var(--shadow-md);
+  padding: var(--space-1) 0;
+  display: flex;
+  flex-direction: column;
+}
+
+.menuItem {
+  display: flex;
+  align-items: center;
   gap: var(--space-2);
+  padding: var(--space-2) var(--space-3);
+  background: none;
+  border: none;
+  border-radius: 0;
+  cursor: pointer;
+  font-family: var(--font-family-base);
+  font-size: var(--font-size-sm);
+  font-weight: var(--font-weight-normal);
+  color: var(--color-text);
+  text-align: left;
+  width: 100%;
+  transition: background-color 0.1s ease;
+}
+
+.menuItem:hover,
+.menuItem:focus-visible {
+  background-color: var(--color-surface-raised);
+  outline: none;
+}
+
+.menuItemDanger {
+  color: var(--color-danger);
+}
+
+.menuItemDanger:hover,
+.menuItemDanger:focus-visible {
+  background-color: var(--color-alert-bg);
 }
 
 /* ── Attachments panel ───────────────────────────────────────── */
@@ -275,8 +383,7 @@
 /* ── Responsive overrides — ≤ 480 px ─────────────────────────── */
 
 @media (max-width: 480px) {
-  /* Full-width action buttons on narrow screens */
   .noteActions {
-    flex-direction: column;
+    flex-wrap: wrap;
   }
 }

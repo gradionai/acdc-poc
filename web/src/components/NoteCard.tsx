@@ -1,4 +1,16 @@
-import type { ChangeEvent, DragEvent } from 'react';
+import type { ChangeEvent, DragEvent, KeyboardEvent } from 'react';
+import { useRef, useState } from 'react';
+import {
+  Pin,
+  PinOff,
+  Pencil,
+  Archive,
+  ArchiveRestore,
+  Paperclip,
+  MoreHorizontal,
+  Copy,
+  Trash2,
+} from 'lucide-react';
 import { Button } from './Button';
 import { NoteBody } from '../NoteBody';
 import {
@@ -43,6 +55,34 @@ export interface NoteCardProps {
   onDeleteAttachment: (noteId: string, filename: string) => void;
 }
 
+/** A small icon-only button with a visible tooltip on hover/focus. */
+function IconButton({
+  label,
+  onClick,
+  variant = 'ghost',
+  children,
+  buttonRef,
+}: {
+  label: string;
+  onClick: (e: React.MouseEvent<HTMLButtonElement>) => void;
+  variant?: 'ghost' | 'danger';
+  children: React.ReactNode;
+  buttonRef?: React.RefObject<HTMLButtonElement>;
+}) {
+  return (
+    <button
+      ref={buttonRef}
+      type="button"
+      aria-label={label}
+      title={label}
+      onClick={onClick}
+      className={`${styles.iconBtn} ${variant === 'danger' ? styles.iconBtnDanger : ''}`}
+    >
+      {children}
+    </button>
+  );
+}
+
 export function NoteCard({
   note: n,
   editingId,
@@ -72,6 +112,21 @@ export function NoteCard({
   onDrop,
   onDeleteAttachment,
 }: NoteCardProps) {
+  const [overflowOpen, setOverflowOpen] = useState(false);
+  const overflowBtnRef = useRef<HTMLButtonElement>(null);
+  const menuRef = useRef<HTMLDivElement>(null);
+
+  function closeOverflow() {
+    setOverflowOpen(false);
+  }
+
+  function handleOverflowKeyDown(e: KeyboardEvent<HTMLDivElement>) {
+    if (e.key === 'Escape') {
+      closeOverflow();
+      overflowBtnRef.current?.focus();
+    }
+  }
+
   if (editingId === n.id) {
     return (
       <li key={n.id} className={styles.noteCard}>
@@ -149,15 +204,20 @@ export function NoteCard({
       ].join(' ')}
       data-color={n.color}
     >
+      {/* ── Card header: title + pinned badge ── */}
       <div className={styles.noteHeader}>
         <span className={styles.noteTitle}>{n.title}</span>
         {n.pinned && (
           <span aria-label="Pinned" className={styles.pinnedBadge}>
-            📌
+            <Pin size={12} aria-hidden="true" />
           </span>
         )}
       </div>
+
+      {/* ── Body ── */}
       <NoteBody body={n.body} className={styles.noteBody} />
+
+      {/* ── Tags ── */}
       {n.tags.length > 0 && (
         <div className={styles.tagList} aria-label="Tags">
           {n.tags.map((tag) => (
@@ -167,54 +227,102 @@ export function NoteCard({
           ))}
         </div>
       )}
+
+      {/* ── Action toolbar ── */}
       <div className={styles.noteActions}>
+        {/* Primary icon actions (always visible, non-archived only where applicable) */}
         {!n.archived && (
-          <Button
-            variant="secondary"
-            aria-label={n.pinned ? `Unpin ${n.title}` : `Pin ${n.title}`}
+          <IconButton
+            label={n.pinned ? `Unpin ${n.title}` : `Pin ${n.title}`}
             onClick={() => onTogglePin(n.id, n.pinned)}
           >
-            {n.pinned ? 'Unpin' : 'Pin'}
-          </Button>
+            {n.pinned ? (
+              <PinOff size={16} aria-hidden="true" />
+            ) : (
+              <Pin size={16} aria-hidden="true" />
+            )}
+          </IconButton>
         )}
-        <Button
-          variant="secondary"
-          aria-label={n.archived ? `Unarchive ${n.title}` : `Archive ${n.title}`}
+
+        {!n.archived && (
+          <IconButton label={`Edit ${n.title}`} onClick={() => onEditStart(n)}>
+            <Pencil size={16} aria-hidden="true" />
+          </IconButton>
+        )}
+
+        <IconButton
+          label={n.archived ? `Unarchive ${n.title}` : `Archive ${n.title}`}
           onClick={() => onToggleArchive(n.id, n.archived)}
         >
-          {n.archived ? 'Unarchive' : 'Archive'}
-        </Button>
+          {n.archived ? (
+            <ArchiveRestore size={16} aria-hidden="true" />
+          ) : (
+            <Archive size={16} aria-hidden="true" />
+          )}
+        </IconButton>
+
         {!n.archived && (
-          <Button variant="secondary" aria-label={`Edit ${n.title}`} onClick={() => onEditStart(n)}>
-            Edit
-          </Button>
-        )}
-        <Button
-          variant="danger"
-          aria-label={`Delete ${n.title}`}
-          onClick={(e) => onDeleteRequest(n.id, e.currentTarget)}
-        >
-          Delete
-        </Button>
-        {!n.archived && (
-          <Button
-            variant="secondary"
-            aria-label={`Duplicate ${n.title}`}
-            onClick={() => onDuplicate(n.id)}
-          >
-            Duplicate
-          </Button>
-        )}
-        {!n.archived && (
-          <Button
-            variant="secondary"
-            aria-label={`Attachments for ${n.title}`}
+          <IconButton
+            label={`Attachments for ${n.title}`}
             onClick={() => onToggleAttachments(n.id)}
           >
-            {attachmentsOpen[n.id] ? 'Hide attachments' : 'Attachments'}
-          </Button>
+            <Paperclip size={16} aria-hidden="true" />
+          </IconButton>
         )}
+
+        {/* Overflow menu — duplicate + delete */}
+        <div className={styles.overflowWrapper}>
+          <IconButton
+            label="More actions"
+            buttonRef={overflowBtnRef}
+            onClick={() => setOverflowOpen((v) => !v)}
+          >
+            <MoreHorizontal size={16} aria-hidden="true" />
+          </IconButton>
+
+          {overflowOpen && (
+            <div
+              ref={menuRef}
+              className={styles.overflowMenu}
+              role="menu"
+              onKeyDown={handleOverflowKeyDown}
+            >
+              {!n.archived && (
+                <button
+                  type="button"
+                  role="menuitem"
+                  aria-label={`Duplicate ${n.title}`}
+                  className={styles.menuItem}
+                  onClick={() => {
+                    closeOverflow();
+                    onDuplicate(n.id);
+                  }}
+                >
+                  <Copy size={14} aria-hidden="true" />
+                  Duplicate
+                </button>
+              )}
+              <button
+                type="button"
+                role="menuitem"
+                aria-label={`Delete ${n.title}`}
+                className={`${styles.menuItem} ${styles.menuItemDanger}`}
+                onClick={() => {
+                  closeOverflow();
+                  // Return focus to the overflow trigger so it can receive focus after
+                  // the dialog is dismissed (the menuitem is removed from DOM on close).
+                  onDeleteRequest(n.id, overflowBtnRef.current as HTMLButtonElement);
+                }}
+              >
+                <Trash2 size={14} aria-hidden="true" />
+                Delete
+              </button>
+            </div>
+          )}
+        </div>
       </div>
+
+      {/* ── Attachments panel ── */}
       {attachmentsOpen[n.id] && (
         <div className={styles.attachmentsPanel} aria-label={`Attachments panel for ${n.title}`}>
           {uploadError[n.id] && (

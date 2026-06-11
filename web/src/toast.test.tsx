@@ -276,9 +276,10 @@ describe('App — toast notifications', () => {
     await userEvent.click(screen.getByRole('button', { name: /add note/i }));
     await waitFor(() => expect(screen.getByText('Delete me')).toBeInTheDocument());
 
-    // Use the exact aria-label to avoid matching dismiss-toast buttons.
+    // Delete is in the overflow menu — open it first.
     // Deletion now requires confirming in a dialog.
-    await userEvent.click(screen.getByRole('button', { name: /^delete delete me$/i }));
+    await userEvent.click(screen.getByRole('button', { name: /more actions/i }));
+    await userEvent.click(screen.getByRole('menuitem', { name: /^delete delete me$/i }));
     await userEvent.click(screen.getByRole('button', { name: /^delete$/i }));
     await waitFor(() => expect(screen.getByText('Note deleted')).toBeInTheDocument());
   });
