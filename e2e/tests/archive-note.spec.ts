@@ -105,8 +105,13 @@ test('unarchive a note: it disappears from the archived view and returns to the 
     timeout: 5000,
   });
 
-  // Switch back to active view — note must reappear
+  // Switch back to active view — note must reappear.
+  // Use toBeVisible (which auto-retries) directly on the expected item so the
+  // assertion waits for the list fetch to complete before we call findNoteItem.
   await page.getByRole('button', { name: /show active notes/i }).click();
+  await expect(page.getByRole('listitem').filter({ hasText: noteTitle })).toBeVisible({
+    timeout: 8000,
+  });
   const restoredItem = await findNoteItem(page, noteTitle);
   await expect(restoredItem).toBeVisible();
 });
