@@ -120,21 +120,32 @@ export function App() {
         setQuery('');
       }
       const newTotal = unfilteredTotal + 1;
-      // With 'newest' or 'title' sort the new note surfaces on page 1.
-      // With 'oldest' sort it appears at the end.
+      // Navigate to the page where the newly created note will appear.
       if (sort === 'oldest') {
+        // oldest: the new note always sorts last → last page.
         const lastPage = Math.max(1, Math.ceil(newTotal / PAGE_SIZE));
         if (page === lastPage && query === '') {
           await refresh(lastPage, '', tagFilter, sort);
         } else {
           setPage(lastPage);
         }
-      } else {
-        // newest / title: navigate to page 1 where the new note appears first.
+      } else if (sort === 'newest') {
+        // newest: the new note always sorts first → page 1.
         if (page === 1 && query === '') {
           await refresh(1, '', tagFilter, sort);
         } else {
           setPage(1);
+        }
+      } else {
+        // title: the new note's page depends on its alphabetical rank among
+        // all (unfiltered) notes. Fetch the full sorted list to find its position.
+        const fullPage = await listNotes(1, newTotal, '', tagFilter, 'title');
+        const rank = fullPage.notes.findIndex((n) => n.title === title) + 1;
+        const dest = rank > 0 ? Math.ceil(rank / PAGE_SIZE) : 1;
+        if (page === dest && query === '') {
+          await refresh(dest, '', tagFilter, sort);
+        } else {
+          setPage(dest);
         }
       }
     } catch (e) {

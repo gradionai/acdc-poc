@@ -385,6 +385,73 @@ describe('App', () => {
     expect(screen.queryByText('OldSort 1')).not.toBeInTheDocument();
   });
 
+  it('new note is visible after create — title sort navigates to the correct page', async () => {
+    // Start with 5 notes whose titles sort before 'Zebra' alphabetically so
+    // that a new note with title 'Zebra' lands on page 2 under title sort.
+    const initialNotes = [
+      { id: '1', title: 'Apple', body: 'b', tags: [] as string[], pinned: false },
+      { id: '2', title: 'Banana', body: 'b', tags: [] as string[], pinned: false },
+      { id: '3', title: 'Cherry', body: 'b', tags: [] as string[], pinned: false },
+      { id: '4', title: 'Date', body: 'b', tags: [] as string[], pinned: false },
+      { id: '5', title: 'Elderberry', body: 'b', tags: [] as string[], pinned: false },
+    ];
+    const notes = [...initialNotes];
+    let nextId = 6;
+    vi.stubGlobal(
+      'fetch',
+      vi.fn(async (url: string, init?: RequestInit) => {
+        if (init?.method === 'POST') {
+          const b = JSON.parse(String(init.body)) as {
+            title: string;
+            body: string;
+            tags?: string[];
+          };
+          const n = {
+            id: String(nextId++),
+            title: b.title,
+            body: b.body,
+            tags: b.tags ?? [],
+            pinned: false,
+          };
+          notes.push(n);
+          return new Response(JSON.stringify(n), { status: 201 });
+        }
+        const urlObj = new URL(url as string, 'http://localhost');
+        const p = Number(urlObj.searchParams.get('page') ?? '1');
+        const pageSize = Number(urlObj.searchParams.get('pageSize') ?? '5');
+        const sortParam = urlObj.searchParams.get('sort') ?? 'newest';
+        const sorted = [...notes].sort((a, b) => {
+          if (a.pinned !== b.pinned) return a.pinned ? -1 : 1;
+          if (sortParam === 'title') return a.title.localeCompare(b.title);
+          if (sortParam === 'oldest') return Number(a.id) - Number(b.id);
+          return Number(b.id) - Number(a.id); // newest
+        });
+        const start = (p - 1) * pageSize;
+        return new Response(JSON.stringify(sorted.slice(start, start + pageSize)), {
+          status: 200,
+          headers: { 'X-Total-Count': String(sorted.length) },
+        });
+      }),
+    );
+
+    render(<App />);
+    // Switch to title sort
+    await userEvent.selectOptions(screen.getByRole('combobox', { name: /sort notes/i }), 'title');
+    await waitFor(() => expect(screen.getByText('Apple')).toBeInTheDocument());
+    // Page 1 under title sort: Apple, Banana, Cherry, Date, Elderberry
+    expect(screen.queryByText('Zebra')).not.toBeInTheDocument();
+
+    // Create a note whose title sorts last alphabetically → should land on page 2
+    await userEvent.type(screen.getByLabelText(/^title$/i), 'Zebra');
+    await userEvent.type(screen.getByLabelText(/^body$/i), 'body');
+    await userEvent.click(screen.getByRole('button', { name: /add note/i }));
+
+    // App must navigate to page 2 where Zebra appears
+    await waitFor(() => expect(screen.getByText('Zebra')).toBeInTheDocument());
+    // Apple (page 1) should no longer be visible
+    expect(screen.queryByText('Apple')).not.toBeInTheDocument();
+  });
+
   it('navigates to next and previous pages', async () => {
     const notes = Array.from({ length: 6 }, (_, i) => ({
       id: String(i + 1),

@@ -101,9 +101,12 @@ test('pinned notes sort ahead of unpinned regardless of sort option', async ({ p
   await expect(page.getByRole('list')).toContainText(noteSecond);
 
   // Pin the first-created note.
+  // Use an anchored regex so we match only the "Pin <title>" button and not
+  // other buttons whose aria-labels contain the note title (which itself
+  // contains the "pin" token and would cause a strict-mode violation).
   const firstItem = page.getByRole('listitem').filter({ hasText: noteFirst });
-  await firstItem.getByRole('button', { name: /pin/i }).click();
-  await expect(firstItem.getByRole('button', { name: /unpin/i })).toBeVisible();
+  await firstItem.getByRole('button', { name: /^Pin /i }).click();
+  await expect(firstItem.getByRole('button', { name: /^Unpin /i })).toBeVisible();
 
   const sortSelect = page.getByRole('combobox', { name: /sort notes/i });
 
