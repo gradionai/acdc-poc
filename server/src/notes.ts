@@ -35,6 +35,15 @@ const MAX_FILE_BYTES = 5 * 1024 * 1024;
 const MAX_FILES_PER_UPLOAD = 10;
 
 /**
+ * Maximum total bytes buffered across all files in a single upload request.
+ * Caps memory usage per request regardless of how many files are sent.
+ * Set to 25 MB (5 files × 5 MB) — a reasonable middle-ground that still
+ * allows meaningful multi-file batches without risking heap pressure under
+ * concurrency.
+ */
+const MAX_REQUEST_BYTES = 25 * 1024 * 1024;
+
+/**
  * Allowed MIME content types for attachment uploads.
  * We check the declared content-type; no magic-byte sniffing needed for the
  * proof-of-work, but we do reject anything not in this list.
@@ -237,6 +246,14 @@ export function createNotesRouter(store: NoteStore): Router {
 
       if (uploadedFiles.length === 0) {
         res.status(400).json({ error: 'file field is required' });
+        return;
+      }
+
+      // Enforce total-bytes cap across the batch to bound per-request memory
+      // usage (memoryStorage buffers every byte in the heap).
+      const totalBytes = uploadedFiles.reduce((sum, f) => sum + f.size, 0);
+      if (totalBytes > MAX_REQUEST_BYTES) {
+        res.status(413).json({ error: 'request too large' });
         return;
       }
 

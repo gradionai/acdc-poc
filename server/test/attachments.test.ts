@@ -345,6 +345,24 @@ describe('multi-file upload', () => {
     const res = await req.expect(400);
     expect(res.body).toEqual({ error: 'too many files' });
   });
+
+  it('enforces the per-request total-bytes cap (rejects batches > 25 MB)', async () => {
+    const app = createApp();
+    const id = await seedNote(app);
+    // Each file is individually under the 5 MB per-file limit (4.5 MB < 5 MB),
+    // but 6 × 4.5 MB = 27 MB exceeds the 25 MB per-request total-bytes cap.
+    // This validates that the route boundary enforces the aggregate memory bound.
+    const fourPointFiveMb = Buffer.alloc(4.5 * 1024 * 1024, 'x');
+    let req = request(app).post(`/api/notes/${id}/attachments`);
+    for (let i = 0; i < 6; i++) {
+      req = req.attach('files', fourPointFiveMb, {
+        filename: `big${i}.txt`,
+        contentType: 'text/plain',
+      });
+    }
+    const res = await req.expect(413);
+    expect(res.body).toHaveProperty('error');
+  });
 });
 
 describe('attachment list', () => {
