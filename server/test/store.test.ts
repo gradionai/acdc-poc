@@ -570,3 +570,26 @@ describe('NoteStore — attachment security', () => {
     expect(overflow).toBeUndefined();
   });
 });
+
+describe('NoteStore — reset()', () => {
+  it('empties notes and attachments and resets the id sequence', () => {
+    const store = new NoteStore();
+    const n = store.create({ title: 'a', body: 'A' });
+    store.addAttachment(n.id, {
+      filename: 'f.txt',
+      contentType: 'text/plain',
+      data: Buffer.from('x'),
+    });
+
+    store.reset();
+
+    // List must be empty with total 0
+    const result = store.list(1, 10);
+    expect(result.total).toBe(0);
+    expect(result.items).toHaveLength(0);
+
+    // Sequence resets: next created note gets id "1"
+    const fresh = store.create({ title: 'b', body: 'B' });
+    expect(fresh.id).toBe('1');
+  });
+});

@@ -665,3 +665,43 @@ describe('POST /api/test/reset — guarded reset endpoint', () => {
     await request(app).post('/api/test/reset').expect(404);
   });
 });
+
+describe('POST /api/test/reset — guarded reset endpoint', () => {
+  let savedEnv: string | undefined;
+
+  afterEach(() => {
+    // Restore the env variable to what it was before each test
+    if (savedEnv === undefined) {
+      delete process.env.ENABLE_TEST_RESET;
+    } else {
+      process.env.ENABLE_TEST_RESET = savedEnv;
+    }
+  });
+
+  it('returns 204 and clears notes when ENABLE_TEST_RESET=1', async () => {
+    savedEnv = process.env.ENABLE_TEST_RESET;
+    process.env.ENABLE_TEST_RESET = '1';
+
+    const store = new NoteStore();
+    const app = createApp(store);
+
+    // Seed a note
+    await request(app).post('/api/notes').send({ title: 't', body: 'b' }).expect(201);
+
+    // Reset
+    await request(app).post('/api/test/reset').expect(204);
+
+    // List should be empty
+    const res = await request(app).get('/api/notes').expect(200);
+    expect(res.body).toHaveLength(0);
+    expect(res.headers['x-total-count']).toBe('0');
+  });
+
+  it('returns 404 when ENABLE_TEST_RESET is not set', async () => {
+    savedEnv = process.env.ENABLE_TEST_RESET;
+    delete process.env.ENABLE_TEST_RESET;
+
+    const app = createApp();
+    await request(app).post('/api/test/reset').expect(404);
+  });
+});
