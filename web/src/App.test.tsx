@@ -1312,3 +1312,194 @@ describe('App — sort', () => {
     await waitFor(() => expect(screen.getByText('Banana')).toBeInTheDocument());
   });
 });
+
+describe('App — title-sort create with duplicate titles', () => {
+  it('navigates to the page showing the new note even when a note with the same title already exists', async () => {
+    // 5 notes: Apple–Elderberry fill page 1.
+    // We already have a note titled "Zebra" on page 2. Creating another "Zebra"
+    // should still land on the page that shows THE NEW note (also "Zebra").
+    // With id-based lookup both notes with title "Zebra" sort adjacently; the
+    // second one (higher id) will appear on whichever page its rank lands on —
+    // the test verifies the app navigates away from page 1 and shows the new note.
+    const initialNotes = [
+      { id: '1', title: 'Apple', body: 'b', tags: [] as string[], pinned: false },
+      { id: '2', title: 'Banana', body: 'b', tags: [] as string[], pinned: false },
+      { id: '3', title: 'Cherry', body: 'b', tags: [] as string[], pinned: false },
+      { id: '4', title: 'Date', body: 'b', tags: [] as string[], pinned: false },
+      { id: '5', title: 'Elderberry', body: 'b', tags: [] as string[], pinned: false },
+      { id: '6', title: 'Zebra', body: 'b', tags: [] as string[], pinned: false },
+    ];
+    const notes = [...initialNotes];
+    let nextId = 7;
+    vi.stubGlobal(
+      'fetch',
+      vi.fn(async (url: string, init?: RequestInit) => {
+        if (init?.method === 'POST') {
+          const b = JSON.parse(String(init.body)) as {
+            title: string;
+            body: string;
+            tags?: string[];
+          };
+          const n = {
+            id: String(nextId++),
+            title: b.title,
+            body: b.body,
+            tags: b.tags ?? [],
+            pinned: false,
+          };
+          notes.push(n);
+          return new Response(JSON.stringify(n), { status: 201 });
+        }
+        const urlObj = new URL(url as string, 'http://localhost');
+        const p = Number(urlObj.searchParams.get('page') ?? '1');
+        const pageSize = Number(urlObj.searchParams.get('pageSize') ?? '5');
+        const sortParam = urlObj.searchParams.get('sort') ?? 'newest';
+        const sorted = [...notes].sort((a, b) => {
+          if (a.pinned !== b.pinned) return a.pinned ? -1 : 1;
+          if (sortParam === 'title')
+            return a.title.localeCompare(b.title) || Number(a.id) - Number(b.id);
+          if (sortParam === 'oldest') return Number(a.id) - Number(b.id);
+          return Number(b.id) - Number(a.id);
+        });
+        const start = (p - 1) * pageSize;
+        return new Response(JSON.stringify(sorted.slice(start, start + pageSize)), {
+          status: 200,
+          headers: { 'X-Total-Count': String(sorted.length) },
+        });
+      }),
+    );
+
+    render(<App />);
+    // Switch to title sort
+    await userEvent.selectOptions(screen.getByRole('combobox', { name: /sort notes/i }), 'title');
+    await waitFor(() => expect(screen.getByText('Apple')).toBeInTheDocument());
+    // "Zebra" is already on page 2 — page 1 shows Apple–Elderberry
+    expect(screen.queryByText('Zebra')).not.toBeInTheDocument();
+
+    // Create a second note also called "Zebra"
+    await userEvent.type(screen.getByLabelText(/^title$/i), 'Zebra');
+    await userEvent.type(screen.getByLabelText(/^body$/i), 'duplicate title body');
+    await userEvent.click(screen.getByRole('button', { name: /add note/i }));
+
+    // The app must navigate to the page that contains the new "Zebra" note
+    // (page 2 under title sort). Apple (page 1) must no longer be visible.
+    await waitFor(() => expect(screen.queryByText('Apple')).not.toBeInTheDocument());
+    // At least one "Zebra" is visible (both sort adjacently on page 2)
+    await waitFor(() => expect(screen.getAllByText('Zebra').length).toBeGreaterThan(0));
+  });
+});
+
+describe('App — duplicate sort-aware navigation', () => {
+  function makeSortAwareSetup() {
+    // 5 notes: Apple–Elderberry, so page 1 is exactly full.
+    const initialNotes = [
+      { id: '1', title: 'Apple', body: 'b', tags: [] as string[], pinned: false },
+      { id: '2', title: 'Banana', body: 'b', tags: [] as string[], pinned: false },
+      { id: '3', title: 'Cherry', body: 'b', tags: [] as string[], pinned: false },
+      { id: '4', title: 'Date', body: 'b', tags: [] as string[], pinned: false },
+      { id: '5', title: 'Elderberry', body: 'b', tags: [] as string[], pinned: false },
+    ];
+    const notes = [...initialNotes];
+    let nextId = initialNotes.length + 1;
+
+    vi.stubGlobal(
+      'fetch',
+      vi.fn(async (url: string, init?: RequestInit) => {
+        const urlStr = url as string;
+
+        // POST /api/notes/:id/duplicate
+        if (init?.method === 'POST' && /\/api\/notes\/[^/]+\/duplicate$/.test(urlStr)) {
+          const sourceId = urlStr.split('/').at(-2) ?? '';
+          const source = notes.find((n) => n.id === sourceId);
+          if (!source) return new Response(JSON.stringify({ error: 'not found' }), { status: 404 });
+          const copy = {
+            id: String(nextId++),
+            title: `Copy of ${source.title}`,
+            body: source.body,
+            tags: [...source.tags],
+            pinned: false,
+          };
+          notes.push(copy);
+          return new Response(JSON.stringify(copy), { status: 201 });
+        }
+
+        const urlObj = new URL(urlStr, 'http://localhost');
+        const p = Number(urlObj.searchParams.get('page') ?? '1');
+        const pageSize = Number(urlObj.searchParams.get('pageSize') ?? '5');
+        const sortParam = urlObj.searchParams.get('sort') ?? 'newest';
+        const sorted = [...notes].sort((a, b) => {
+          if (a.pinned !== b.pinned) return a.pinned ? -1 : 1;
+          if (sortParam === 'title') return a.title.localeCompare(b.title);
+          if (sortParam === 'oldest') return Number(a.id) - Number(b.id);
+          return Number(b.id) - Number(a.id);
+        });
+        const start = (p - 1) * pageSize;
+        return new Response(JSON.stringify(sorted.slice(start, start + pageSize)), {
+          status: 200,
+          headers: { 'X-Total-Count': String(sorted.length) },
+        });
+      }),
+    );
+
+    return notes;
+  }
+
+  it('duplicate under newest sort navigates to page 1 where the copy (highest createdAt) appears', async () => {
+    makeSortAwareSetup();
+    render(<App />);
+    // Default sort is newest; page 1 shows note id=5 (Elderberry) first
+    await waitFor(() => expect(screen.getByText('Elderberry')).toBeInTheDocument());
+
+    // Duplicate the first note in the list (Elderberry has the highest id / newest)
+    await userEvent.click(screen.getByRole('button', { name: /duplicate elderberry/i }));
+
+    // Under newest sort the copy (id=6, highest createdAt) must sort first → page 1
+    await waitFor(() => expect(screen.getByText('Copy of Elderberry')).toBeInTheDocument());
+    // Previous button disabled confirms we are on page 1
+    expect(screen.getByRole('button', { name: /previous/i })).toBeDisabled();
+  });
+
+  it('duplicate under oldest sort navigates to the last page where the copy (highest createdAt) appears', async () => {
+    makeSortAwareSetup();
+    render(<App />);
+    await waitFor(() => expect(screen.getByText('Elderberry')).toBeInTheDocument());
+
+    // Switch to oldest sort: page 1 now shows Apple (id=1) first
+    await userEvent.selectOptions(screen.getByRole('combobox', { name: /sort notes/i }), 'oldest');
+    await waitFor(() => expect(screen.getByText('Apple')).toBeInTheDocument());
+    expect(screen.queryByText('Elderberry')).toBeInTheDocument();
+
+    // Duplicate Apple — under oldest sort, the copy (highest id) sorts last → last page
+    await userEvent.click(screen.getByRole('button', { name: /duplicate apple/i }));
+
+    // The copy sorts last under oldest → navigates to the last page
+    await waitFor(() => expect(screen.getByText('Copy of Apple')).toBeInTheDocument());
+    // The original Apple (page 1 content) is no longer visible
+    expect(screen.queryByText('Apple')).not.toBeInTheDocument();
+    // Next button disabled confirms we are on the last page
+    expect(screen.getByRole('button', { name: /next/i })).toBeDisabled();
+  });
+
+  it('duplicate under title sort navigates to the page containing the copy alphabetically', async () => {
+    makeSortAwareSetup();
+    render(<App />);
+    await waitFor(() => expect(screen.getByText('Elderberry')).toBeInTheDocument());
+
+    // Switch to title sort
+    await userEvent.selectOptions(screen.getByRole('combobox', { name: /sort notes/i }), 'title');
+    await waitFor(() => expect(screen.getByText('Apple')).toBeInTheDocument());
+    // Page 1 under title: Apple, Banana, Cherry, Date, Elderberry
+    expect(screen.queryByText('Copy of')).not.toBeInTheDocument();
+
+    // Duplicate "Banana" → copy title "Copy of Banana"
+    // "C" sorts after "B" but before "D" — "Copy of Banana" lands alphabetically
+    // between Cherry and Date, so all 6 notes still fit on pages 1-2 (5+1).
+    // Page 1: Apple, Banana, Cherry, Copy of Banana, Date → Copy of Banana on page 1
+    // Actually: "Copy of Banana".localeCompare order: Apple < Banana < Cherry < Copy of Banana < Date < Elderberry
+    // Page 1 (5 notes): Apple, Banana, Cherry, Copy of Banana, Date
+    // The app should navigate to the page containing "Copy of Banana".
+    await userEvent.click(screen.getByRole('button', { name: /duplicate banana/i }));
+
+    await waitFor(() => expect(screen.getByText('Copy of Banana')).toBeInTheDocument());
+  });
+});

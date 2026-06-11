@@ -115,11 +115,31 @@ export function App() {
     return () => clearTimeout(timer);
   }, [searchInput]);
 
+  /**
+   * Determine which page contains the note with the given id under the
+   * active sort order by fetching the full sorted list and locating the note
+   * by its unique id (title-based lookup breaks when titles collide).
+   * Returns 1 as a safe fallback if the note is not found in the list.
+   */
+  async function pageContainingNote(
+    id: string,
+    newTotal: number,
+    tf: string,
+    s: typeof sort,
+  ): Promise<number> {
+    if (s === 'newest') return 1;
+    if (s === 'oldest') return Math.max(1, Math.ceil(newTotal / PAGE_SIZE));
+    // title sort: locate the note by its unique id in the full sorted list.
+    const fullPage = await listNotes(1, newTotal, '', tf, 'title');
+    const rank = fullPage.notes.findIndex((n) => n.id === id) + 1;
+    return rank > 0 ? Math.ceil(rank / PAGE_SIZE) : 1;
+  }
+
   async function onSubmit(e: FormEvent) {
     e.preventDefault();
     if (!title.trim() || !body.trim()) return;
     try {
-      await createNote({ title, body, tags: parseTags(tagsInput) });
+      const created = await createNote({ title, body, tags: parseTags(tagsInput) });
       setTitle('');
       setBody('');
       setTagsInput('');
@@ -140,32 +160,12 @@ export function App() {
       }
       const newTotal = unfilteredTotal + 1;
       // Navigate to the page where the newly created note will appear.
-      if (sort === 'oldest') {
-        // oldest: the new note always sorts last → last page.
-        const lastPage = Math.max(1, Math.ceil(newTotal / PAGE_SIZE));
-        if (page === lastPage && query === '') {
-          await refresh(lastPage, '', tagFilter, sort);
-        } else {
-          setPage(lastPage);
-        }
-      } else if (sort === 'newest') {
-        // newest: the new note always sorts first → page 1.
-        if (page === 1 && query === '') {
-          await refresh(1, '', tagFilter, sort);
-        } else {
-          setPage(1);
-        }
+      // Use the note's unique id (not its title) so duplicate titles are handled correctly.
+      const dest = await pageContainingNote(created.id, newTotal, tagFilter, sort);
+      if (page === dest && query === '') {
+        await refresh(dest, '', tagFilter, sort);
       } else {
-        // title: the new note's page depends on its alphabetical rank among
-        // all (unfiltered) notes. Fetch the full sorted list to find its position.
-        const fullPage = await listNotes(1, newTotal, '', tagFilter, 'title');
-        const rank = fullPage.notes.findIndex((n) => n.title === title) + 1;
-        const dest = rank > 0 ? Math.ceil(rank / PAGE_SIZE) : 1;
-        if (page === dest && query === '') {
-          await refresh(dest, '', tagFilter, sort);
-        } else {
-          setPage(dest);
-        }
+        setPage(dest);
       }
     } catch (e: unknown) {
       addToast('Failed to create note', 'error');
@@ -294,18 +294,21 @@ export function App() {
 
   async function onDuplicate(id: string) {
     try {
-      await duplicateNote(id);
+      const copy = await duplicateNote(id);
       setError(null);
-      // The duplicate is appended at the end (newest createdAt); navigate to the
-      // last page so it is immediately visible.
+      addToast('Note duplicated', 'success');
+      // The copy's position depends on the active sort order.
+      // Use pageContainingNote so all three sort orders are handled correctly:
+      // newest → page 1 (highest createdAt), oldest → last page, title → alphabetical rank.
       const newTotal = total + 1;
-      const lastPage = Math.max(1, Math.ceil(newTotal / PAGE_SIZE));
-      if (page === lastPage) {
-        await refresh(lastPage);
+      const dest = await pageContainingNote(copy.id, newTotal, tagFilter, sort);
+      if (page === dest) {
+        await refresh(dest);
       } else {
-        setPage(lastPage);
+        setPage(dest);
       }
     } catch (e: unknown) {
+      addToast('Failed to duplicate note', 'error');
       setError(e instanceof Error ? e.message : 'An unexpected error occurred');
     }
   }
