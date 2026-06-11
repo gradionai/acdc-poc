@@ -1,4 +1,4 @@
-import { Router, type Request, type Response } from 'express';
+import { Router, type Request, type Response, type NextFunction } from 'express';
 import multer from 'multer';
 import { NoteStore } from './store.js';
 
@@ -21,6 +21,9 @@ function contentDispositionFilename(filename: string): string {
 
 /** 5 MB upper bound for individual file uploads. */
 const MAX_FILE_BYTES = 5 * 1024 * 1024;
+
+/** Maximum number of files accepted in a single multi-file upload request. */
+const MAX_FILES_PER_UPLOAD = 10;
 
 /**
  * Allowed MIME content types for attachment uploads.
@@ -188,7 +191,7 @@ export function createNotesRouter(store: NoteStore): Router {
 
   router.post(
     '/:id/attachments',
-    (req: Request, res: Response, next) => {
+    (req: Request, res: Response, next: NextFunction) => {
       // Verify note existence before parsing the multipart body — gives an
       // immediate 404 without consuming upload bytes for a missing note.
       if (!store.get(req.params.id)) {
@@ -204,24 +207,57 @@ export function createNotesRouter(store: NoteStore): Router {
       }
       next();
     },
-    upload.single('file'),
+    // Accept either a single 'file' field (backward-compat) or up to
+    // MAX_FILES_PER_UPLOAD files under the 'files' field.
+    upload.fields([
+      { name: 'file', maxCount: 1 },
+      { name: 'files', maxCount: MAX_FILES_PER_UPLOAD },
+    ]),
     (req: Request, res: Response) => {
-      if (!req.file) {
+      // Normalise: collect uploaded files from whichever field was used.
+      const fields = req.files as Record<string, Express.Multer.File[]> | undefined;
+      const uploadedFiles: Express.Multer.File[] = [
+        ...(fields?.['file'] ?? []),
+        ...(fields?.['files'] ?? []),
+      ];
+
+      if (uploadedFiles.length === 0) {
         res.status(400).json({ error: 'file field is required' });
         return;
       }
-      const meta = store.addAttachment(req.params.id, {
-        filename: req.file.originalname,
-        contentType: req.file.mimetype,
-        data: req.file.buffer,
-      });
-      if (!meta) {
-        // Note was deleted between the pre-check and store write — treat as 404.
-        // The cap check above ran before upload; a race here is benign for a PoC.
+
+      // Enforce cap across the entire batch: reject if adding all files would
+      // exceed the per-note limit.
+      const currentCount = store.attachmentCount(req.params.id);
+      if (currentCount + uploadedFiles.length > NoteStore.MAX_ATTACHMENTS_PER_NOTE) {
+        res.status(413).json({
+          error: `attachment limit of ${NoteStore.MAX_ATTACHMENTS_PER_NOTE} per note reached`,
+        });
+        return;
+      }
+
+      const metas = uploadedFiles.map((f) =>
+        store.addAttachment(req.params.id, {
+          filename: f.originalname,
+          contentType: f.mimetype,
+          data: f.buffer,
+        }),
+      );
+
+      // If any store write returned undefined the note was deleted mid-request.
+      if (metas.some((m) => m === undefined)) {
         res.status(404).json({ error: 'not found' });
         return;
       }
-      res.status(201).json(meta);
+
+      // Single-file backward-compat: return a plain object (not an array)
+      // when the caller used the legacy 'file' field.
+      if (fields?.['file']?.length === 1 && !fields?.['files']?.length) {
+        res.status(201).json(metas[0]);
+        return;
+      }
+
+      res.status(201).json(metas);
     },
   );
 

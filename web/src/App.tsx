@@ -1,4 +1,11 @@
-import { useEffect, useRef, useState, type ChangeEvent, type FormEvent } from 'react';
+import {
+  useEffect,
+  useRef,
+  useState,
+  type ChangeEvent,
+  type DragEvent,
+  type FormEvent,
+} from 'react';
 import {
   attachmentDownloadUrl,
   createNote,
@@ -9,7 +16,7 @@ import {
   listNotes,
   togglePin,
   updateNote,
-  uploadAttachment,
+  uploadAttachments,
   type AttachmentMeta,
   type Note,
 } from './api';
@@ -59,6 +66,8 @@ export function App() {
   const [attachmentsOpen, setAttachmentsOpen] = useState<Record<string, boolean>>({});
   /** noteId → upload error string. */
   const [uploadError, setUploadError] = useState<Record<string, string | null>>({});
+  /** noteId → true while a drag is active over that note's dropzone. */
+  const [dragOver, setDragOver] = useState<Record<string, boolean>>({});
 
   // Monotonically increasing counter; each refresh call captures its own id
   // and only applies its result if no newer request has been issued since.
@@ -186,19 +195,43 @@ export function App() {
     }
   }
 
-  async function onUploadFile(id: string, e: ChangeEvent<HTMLInputElement>) {
-    const file = e.target.files?.[0];
-    if (!file) return;
-    // Reset the input so the same file can be re-uploaded after correction
-    e.target.value = '';
+  async function uploadFiles(id: string, files: File[]) {
+    if (files.length === 0) return;
     setUploadError((prev) => ({ ...prev, [id]: null }));
     try {
-      await uploadAttachment(id, file);
+      await uploadAttachments(id, files);
       const metas = await listAttachments(id);
       setAttachments((prev) => ({ ...prev, [id]: metas }));
     } catch (err) {
       setUploadError((prev) => ({ ...prev, [id]: String(err) }));
     }
+  }
+
+  async function onUploadFile(id: string, e: ChangeEvent<HTMLInputElement>) {
+    const files = Array.from(e.target.files ?? []);
+    // Reset the input so the same file(s) can be re-uploaded after correction
+    e.target.value = '';
+    await uploadFiles(id, files);
+  }
+
+  function onDragOver(id: string, e: DragEvent<HTMLDivElement>) {
+    e.preventDefault();
+    e.stopPropagation();
+    setDragOver((prev) => ({ ...prev, [id]: true }));
+  }
+
+  function onDragLeave(id: string, e: DragEvent<HTMLDivElement>) {
+    e.preventDefault();
+    e.stopPropagation();
+    setDragOver((prev) => ({ ...prev, [id]: false }));
+  }
+
+  async function onDrop(id: string, e: DragEvent<HTMLDivElement>) {
+    e.preventDefault();
+    e.stopPropagation();
+    setDragOver((prev) => ({ ...prev, [id]: false }));
+    const files = Array.from(e.dataTransfer.files);
+    await uploadFiles(id, files);
   }
 
   async function onTogglePin(id: string, currentlyPinned: boolean) {
@@ -472,10 +505,24 @@ export function App() {
                       {uploadError[n.id]}
                     </p>
                   )}
+                  {/* Drag-and-drop dropzone */}
+                  <div
+                    role="region"
+                    aria-label={`Drop files here to attach to ${n.title}`}
+                    className={`${styles.dropzone} ${dragOver[n.id] ? styles.dropzoneActive : ''}`}
+                    onDragOver={(e) => onDragOver(n.id, e)}
+                    onDragLeave={(e) => onDragLeave(n.id, e)}
+                    onDrop={(e) => void onDrop(n.id, e)}
+                  >
+                    <span className={styles.dropzoneHint}>
+                      Drag &amp; drop files here, or use the button below
+                    </span>
+                  </div>
                   <label className={styles.attachmentUpload}>
-                    Attach file
+                    Attach files
                     <input
                       type="file"
+                      multiple
                       aria-label={`Upload attachment for ${n.title}`}
                       onChange={(e) => void onUploadFile(n.id, e)}
                     />

@@ -197,6 +197,36 @@
   border-radius: var(--radius-base);
 }
 
+/* ── Drag-and-drop dropzone ──────────────────────────────────── */
+
+.dropzone {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: var(--space-4);
+  margin-bottom: var(--space-3);
+  border: 2px dashed var(--color-surface-border);
+  border-radius: var(--radius-base);
+  background-color: var(--color-surface);
+  transition:
+    border-color 0.15s ease,
+    background-color 0.15s ease;
+  cursor: default;
+  min-height: 4rem;
+}
+
+.dropzoneActive {
+  border-color: var(--color-primary);
+  background-color: var(--color-tag-bg);
+}
+
+.dropzoneHint {
+  font-size: var(--font-size-sm);
+  color: var(--color-text-muted);
+  text-align: center;
+  pointer-events: none;
+}
+
 .attachmentUpload {
   display: flex;
   flex-direction: column;

@@ -131,6 +131,28 @@ export async function uploadAttachment(noteId: string, file: File): Promise<Atta
   return created;
 }
 
+/**
+ * Upload multiple files at once using the 'files' field.
+ * Returns the list of successfully created attachment metadata.
+ * Throws an Error with the server-provided message on failure.
+ */
+export async function uploadAttachments(noteId: string, files: File[]): Promise<AttachmentMeta[]> {
+  const form = new FormData();
+  for (const file of files) {
+    form.append('files', file);
+  }
+  const res = await fetch(`${base}/${noteId}/attachments`, { method: 'POST', body: form });
+  if (!res.ok) {
+    const payload = (await res.json().catch(() => ({}))) as { error?: string };
+    throw new Error(payload.error ?? 'failed to upload attachments');
+  }
+  const created: unknown = await res.json();
+  if (!Array.isArray(created) || !created.every(isAttachmentMeta)) {
+    throw new Error('invalid attachments payload');
+  }
+  return created;
+}
+
 export async function listAttachments(noteId: string): Promise<AttachmentMeta[]> {
   const res = await fetch(`${base}/${noteId}/attachments`);
   if (!res.ok) throw new Error('failed to load attachments');

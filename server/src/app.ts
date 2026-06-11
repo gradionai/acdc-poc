@@ -44,12 +44,16 @@ export function createApp(store: NoteStore = new NoteStore()): Express {
   // Any other /api/* is a JSON 404 — never the SPA fallback.
   app.use('/api', (_req: Request, res: Response) => res.status(404).json({ error: 'not found' }));
 
-  // Handle multer errors (file too large, rejected content type) as JSON 400.
+  // Handle multer errors (file too large, too many files, rejected content type).
   // eslint-disable-next-line @typescript-eslint/no-unused-vars
   app.use((err: unknown, _req: Request, res: Response, _next: NextFunction) => {
     if (err instanceof multer.MulterError) {
       if (err.code === 'LIMIT_FILE_SIZE') {
         res.status(413).json({ error: 'file too large' });
+        return;
+      }
+      if (err.code === 'LIMIT_FILE_COUNT') {
+        res.status(400).json({ error: 'too many files' });
         return;
       }
       res.status(400).json({ error: err.message });
