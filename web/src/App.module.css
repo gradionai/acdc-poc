@@ -25,6 +25,12 @@
   color: var(--color-text);
 }
 
+.headerActions {
+  display: flex;
+  align-items: center;
+  gap: var(--space-3);
+}
+
 /* ── Alert banner ────────────────────────────────────────────── */
 
 .alert {

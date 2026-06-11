@@ -177,3 +177,50 @@ export async function deleteAttachment(noteId: string, filename: string): Promis
   });
   if (!res.ok && res.status !== 404) throw new Error('failed to delete attachment');
 }
+
+// ── Tag management ────────────────────────────────────────────────────────────
+
+export interface TagStat {
+  tag: string;
+  count: number;
+}
+
+function isTagStat(value: unknown): value is TagStat {
+  if (!value || typeof value !== 'object') return false;
+  const v = value as Record<string, unknown>;
+  return typeof v.tag === 'string' && typeof v.count === 'number';
+}
+
+const tagsBase = '/api/tags';
+
+export async function listTags(): Promise<TagStat[]> {
+  const res = await fetch(tagsBase);
+  if (!res.ok) throw new Error('failed to load tags');
+  const data: unknown = await res.json();
+  if (!Array.isArray(data) || !data.every(isTagStat)) {
+    throw new Error('invalid tags payload');
+  }
+  return data;
+}
+
+export async function renameTag(from: string, to: string): Promise<{ affected: number }> {
+  const res = await fetch(`${tagsBase}/rename`, {
+    method: 'POST',
+    headers: { 'content-type': 'application/json' },
+    body: JSON.stringify({ from, to }),
+  });
+  if (!res.ok) {
+    const payload = (await res.json().catch(() => ({}))) as { error?: string };
+    throw new Error(payload.error ?? 'failed to rename tag');
+  }
+  return (await res.json()) as { affected: number };
+}
+
+export async function deleteTag(tag: string): Promise<{ affected: number }> {
+  const res = await fetch(`${tagsBase}/${encodeURIComponent(tag)}`, { method: 'DELETE' });
+  if (!res.ok) {
+    const payload = (await res.json().catch(() => ({}))) as { error?: string };
+    throw new Error(payload.error ?? 'failed to delete tag');
+  }
+  return (await res.json()) as { affected: number };
+}

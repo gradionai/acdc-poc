@@ -204,6 +204,55 @@ export class NoteStore {
     return result;
   }
 
+  /**
+   * Return every unique tag currently in use, paired with how many notes carry it.
+   * Results are sorted alphabetically by tag name.
+   */
+  listTags(): Array<{ tag: string; count: number }> {
+    const counts = new Map<string, number>();
+    for (const note of this.notes.values()) {
+      for (const tag of note.tags) {
+        counts.set(tag, (counts.get(tag) ?? 0) + 1);
+      }
+    }
+    return [...counts.entries()]
+      .map(([tag, count]) => ({ tag, count }))
+      .sort((a, b) => a.tag.localeCompare(b.tag));
+  }
+
+  /**
+   * Rename a tag across every note that carries it.
+   * Returns the number of notes that were updated.
+   * Callers are responsible for verifying that `to` does not already exist as a
+   * separate tag before calling this method.
+   */
+  renameTag(from: string, to: string): number {
+    let affected = 0;
+    for (const [id, note] of this.notes.entries()) {
+      if (note.tags.includes(from)) {
+        const newTags = note.tags.map((t) => (t === from ? to : t));
+        this.notes.set(id, { ...note, tags: newTags });
+        affected++;
+      }
+    }
+    return affected;
+  }
+
+  /**
+   * Delete a tag from every note that carries it.
+   * Returns the number of notes that were modified.
+   */
+  deleteTag(tag: string): number {
+    let affected = 0;
+    for (const [id, note] of this.notes.entries()) {
+      if (note.tags.includes(tag)) {
+        this.notes.set(id, { ...note, tags: note.tags.filter((t) => t !== tag) });
+        affected++;
+      }
+    }
+    return affected;
+  }
+
   /** Test-only: clear all notes and attachments and reset the id sequence. */
   reset(): void {
     this.notes.clear();

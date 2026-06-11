@@ -5,6 +5,7 @@ import fs from 'node:fs';
 import multer from 'multer';
 import { NoteStore } from './store.js';
 import { createNotesRouter } from './notes.js';
+import { createTagsRouter } from './tags.js';
 import { createHealthRouter } from './health.js';
 import { createOpenApiRouter } from './openapi.js';
 import { requestLogger } from './logger.js';
@@ -32,6 +33,7 @@ export function createApp(store: NoteStore = new NoteStore()): Express {
   app.use('/api/health', createHealthRouter());
   app.use('/api/openapi.json', createOpenApiRouter());
   app.use('/api/notes', createNotesRouter(store));
+  app.use('/api/tags', createTagsRouter(store));
   // Test-only reset endpoint. Mounted ONLY when ENABLE_TEST_RESET=1 (set by the
   // e2e webServer). Never present in production — there is no way to enable it
   // without the env flag, so it cannot be reached by clients.

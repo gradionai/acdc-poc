@@ -23,6 +23,7 @@ import {
 } from './api';
 import { Button } from './components/Button';
 import { NoteBody } from './NoteBody';
+import { TagManager } from './TagManager';
 import { ToastContainer } from './ToastContainer';
 import { useTheme } from './useTheme';
 import { countWords, countChars } from './wordCount';
@@ -47,6 +48,7 @@ function parseTags(raw: string): string[] {
 export function App() {
   const { theme, toggleTheme } = useTheme();
   const { toasts, addToast, dismissToast } = useToast();
+  const [showTagManager, setShowTagManager] = useState(false);
   const [notes, setNotes] = useState<Note[]>([]);
   const [title, setTitle] = useState('');
   const [body, setBody] = useState('');
@@ -367,13 +369,23 @@ export function App() {
     <main className={styles.page}>
       <header className={styles.pageHeader}>
         <h1 className={styles.pageTitle}>Notes</h1>
-        <button
-          aria-label={theme === 'dark' ? 'Switch to light mode' : 'Switch to dark mode'}
-          className="theme-toggle"
-          onClick={toggleTheme}
-        >
-          {theme === 'dark' ? '☀️' : '🌙'}
-        </button>
+        <div className={styles.headerActions}>
+          <Button
+            variant="secondary"
+            onClick={() => setShowTagManager((v) => !v)}
+            aria-expanded={showTagManager}
+            aria-controls="tag-manager-panel"
+          >
+            {showTagManager ? 'Hide tag manager' : 'Manage tags'}
+          </Button>
+          <button
+            aria-label={theme === 'dark' ? 'Switch to light mode' : 'Switch to dark mode'}
+            className="theme-toggle"
+            onClick={toggleTheme}
+          >
+            {theme === 'dark' ? '☀️' : '🌙'}
+          </button>
+        </div>
       </header>
       {error && (
         <div role="alert" className={styles.errorBanner}>
@@ -381,6 +393,13 @@ export function App() {
           <Button variant="danger" onClick={() => void refresh()} aria-label="Retry">
             Retry
           </Button>
+        </div>
+      )}
+
+      {/* Tag manager panel */}
+      {showTagManager && (
+        <div id="tag-manager-panel">
+          <TagManager onChanged={() => void refresh(page, query, tagFilter)} />
         </div>
       )}
 
