@@ -5,6 +5,8 @@ import fs from 'node:fs';
 import multer from 'multer';
 import { NoteStore } from './store.js';
 import { createNotesRouter } from './notes.js';
+import { createHealthRouter } from './health.js';
+import { createOpenApiRouter } from './openapi.js';
 
 const here = path.dirname(fileURLToPath(import.meta.url));
 // dist/src/app.js → ../../../web/dist  ;  src/app.ts (tsx dev) → ../../web/dist
@@ -17,6 +19,8 @@ export function createApp(store: NoteStore = new NoteStore()): Express {
   app.use(express.json());
 
   // API first.
+  app.use('/api/health', createHealthRouter());
+  app.use('/api/openapi.json', createOpenApiRouter());
   app.use('/api/notes', createNotesRouter(store));
   // Any other /api/* is a JSON 404 — never the SPA fallback.
   app.use('/api', (_req: Request, res: Response) => res.status(404).json({ error: 'not found' }));
