@@ -11,6 +11,7 @@ import {
   type AttachmentMeta,
   type Note,
 } from './api';
+import './App.css';
 
 const PAGE_SIZE = 5;
 const SEARCH_DEBOUNCE_MS = 300;
@@ -227,31 +228,37 @@ export function App() {
   }
 
   return (
-    <main>
+    <main className="app-shell">
       <h1>Notes</h1>
-      {error && <p role="alert">{error}</p>}
-      <label>
-        Search
-        <input
-          aria-label="Search notes"
-          placeholder="Search notes…"
-          value={searchInput}
-          onChange={(e) => setSearchInput(e.target.value)}
-        />
-      </label>
-      <label>
-        Filter by tag
-        <input
-          aria-label="Filter by tag"
-          placeholder="Filter by tag…"
-          value={tagFilter}
-          onChange={(e) => {
-            setPage(1);
-            setTagFilter(e.target.value);
-          }}
-        />
-      </label>
-      <form onSubmit={onSubmit}>
+      {error && (
+        <p role="alert" className="error-alert">
+          {error}
+        </p>
+      )}
+      <div className="filter-row">
+        <label>
+          Search
+          <input
+            aria-label="Search notes"
+            placeholder="Search notes…"
+            value={searchInput}
+            onChange={(e) => setSearchInput(e.target.value)}
+          />
+        </label>
+        <label>
+          Filter by tag
+          <input
+            aria-label="Filter by tag"
+            placeholder="Filter by tag…"
+            value={tagFilter}
+            onChange={(e) => {
+              setPage(1);
+              setTagFilter(e.target.value);
+            }}
+          />
+        </label>
+      </div>
+      <form className="note-form" onSubmit={onSubmit}>
         <label>
           Title
           <input value={title} onChange={(e) => setTitle(e.target.value)} />
@@ -271,73 +278,82 @@ export function App() {
         </label>
         <button type="submit">Add note</button>
       </form>
-      <ul>
+      <ul className="notes-list">
         {notes.map((n) =>
           editingId === n.id ? (
-            <li key={n.id}>
-              <label>
-                Edit title
-                <input
-                  aria-label="Edit title"
-                  value={editTitle}
-                  onChange={(e) => setEditTitle(e.target.value)}
-                />
-              </label>
-              <label>
-                Edit body
-                <textarea
-                  aria-label="Edit body"
-                  value={editBody}
-                  onChange={(e) => setEditBody(e.target.value)}
-                />
-              </label>
-              <label>
-                Edit tags
-                <input
-                  aria-label="Edit tags"
-                  placeholder="comma-separated tags"
-                  value={editTagsInput}
-                  onChange={(e) => setEditTagsInput(e.target.value)}
-                />
-              </label>
-              <button onClick={() => void onEditSave(n.id)}>Save</button>
-              <button onClick={onEditCancel}>Cancel</button>
+            <li key={n.id} className="note-card">
+              <div className="edit-form">
+                <label>
+                  Edit title
+                  <input
+                    aria-label="Edit title"
+                    value={editTitle}
+                    onChange={(e) => setEditTitle(e.target.value)}
+                  />
+                </label>
+                <label>
+                  Edit body
+                  <textarea
+                    aria-label="Edit body"
+                    value={editBody}
+                    onChange={(e) => setEditBody(e.target.value)}
+                  />
+                </label>
+                <label>
+                  Edit tags
+                  <input
+                    aria-label="Edit tags"
+                    placeholder="comma-separated tags"
+                    value={editTagsInput}
+                    onChange={(e) => setEditTagsInput(e.target.value)}
+                  />
+                </label>
+                <div className="note-actions">
+                  <button onClick={() => void onEditSave(n.id)}>Save</button>
+                  <button onClick={onEditCancel}>Cancel</button>
+                </div>
+              </div>
             </li>
           ) : (
-            <li key={n.id}>
-              <strong>{n.title}</strong>: {n.body}
-              {n.pinned && <span aria-label="Pinned">📌</span>}
+            <li key={n.id} className="note-card">
+              <div className="note-header">
+                <strong>{n.title}</strong>
+                {n.pinned && <span aria-label="Pinned">📌</span>}
+              </div>
+              <p className="note-body-text">{n.body}</p>
               {n.tags.length > 0 && (
-                <span aria-label="Tags">
+                <div className="note-tags" aria-label="Tags">
                   {n.tags.map((tag) => (
-                    <span key={tag} data-tag={tag}>
+                    <span key={tag} className="note-tag" data-tag={tag}>
                       {tag}
                     </span>
                   ))}
-                </span>
+                </div>
               )}
-              <button
-                aria-label={n.pinned ? `Unpin ${n.title}` : `Pin ${n.title}`}
-                onClick={() => void onTogglePin(n.id, n.pinned)}
-              >
-                {n.pinned ? 'Unpin' : 'Pin'}
-              </button>
-              <button aria-label={`Edit ${n.title}`} onClick={() => onEditStart(n)}>
-                Edit
-              </button>
-              <button aria-label={`Delete ${n.title}`} onClick={() => void onDelete(n.id)}>
-                Delete
-              </button>
-              <button
-                aria-label={`Attachments for ${n.title}`}
-                onClick={() => void onToggleAttachments(n.id)}
-              >
-                {attachmentsOpen[n.id] ? 'Hide attachments' : 'Attachments'}
-              </button>
+              <div className="note-actions">
+                <button
+                  aria-label={n.pinned ? `Unpin ${n.title}` : `Pin ${n.title}`}
+                  onClick={() => void onTogglePin(n.id, n.pinned)}
+                >
+                  {n.pinned ? 'Unpin' : 'Pin'}
+                </button>
+                <button aria-label={`Edit ${n.title}`} onClick={() => onEditStart(n)}>
+                  Edit
+                </button>
+                <button aria-label={`Delete ${n.title}`} onClick={() => void onDelete(n.id)}>
+                  Delete
+                </button>
+                <button
+                  aria-label={`Attachments for ${n.title}`}
+                  onClick={() => void onToggleAttachments(n.id)}
+                >
+                  {attachmentsOpen[n.id] ? 'Hide attachments' : 'Attachments'}
+                </button>
+              </div>
               {attachmentsOpen[n.id] && (
-                <div aria-label={`Attachments panel for ${n.title}`}>
+                <div className="attachments-panel" aria-label={`Attachments panel for ${n.title}`}>
                   {uploadError[n.id] && <p role="alert">{uploadError[n.id]}</p>}
-                  <label>
+                  <label className="upload-label">
                     Attach file
                     <input
                       type="file"
@@ -348,7 +364,7 @@ export function App() {
                   {(attachments[n.id] ?? []).length === 0 ? (
                     <p>No attachments yet.</p>
                   ) : (
-                    <ul aria-label={`Attachment list for ${n.title}`}>
+                    <ul className="attachments-list" aria-label={`Attachment list for ${n.title}`}>
                       {(attachments[n.id] ?? []).map((att) => (
                         <li key={att.filename}>
                           <a
@@ -369,7 +385,7 @@ export function App() {
           ),
         )}
       </ul>
-      <nav aria-label="Pagination">
+      <nav className="pagination" aria-label="Pagination">
         <button
           onClick={() => setPage((p) => p - 1)}
           disabled={page <= 1}
