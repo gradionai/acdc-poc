@@ -7,6 +7,8 @@ import { NoteStore } from './store.js';
 import { createNotesRouter } from './notes.js';
 import { createHealthRouter } from './health.js';
 import { createOpenApiRouter } from './openapi.js';
+import { requestLogger } from './logger.js';
+import { createRateLimiter } from './rateLimiter.js';
 
 const here = path.dirname(fileURLToPath(import.meta.url));
 // dist/src/app.js → ../../../web/dist  ;  src/app.ts (tsx dev) → ../../web/dist
@@ -16,6 +18,14 @@ const webDist = fs.existsSync(path.join(here, '../../../web/dist'))
 
 export function createApp(store: NoteStore = new NoteStore()): Express {
   const app = express();
+
+  // Request logging (quiet in test env).
+  app.use(requestLogger);
+
+  // Rate limiting — applied to /api/* only (static assets are not subject to limits).
+  // GET /api/health is exempt from rate limiting (see exemptPaths in rateLimiter.ts).
+  app.use('/api', createRateLimiter());
+
   app.use(express.json());
 
   // API first.
