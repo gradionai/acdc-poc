@@ -157,6 +157,15 @@ export function createNotesRouter(store: NoteStore): Router {
     res.status(204).end();
   });
 
+  router.post('/:id/duplicate', (req: Request, res: Response) => {
+    const copy = store.duplicate(req.params.id);
+    if (!copy) {
+      res.status(404).json({ error: 'not found' });
+      return;
+    }
+    res.status(201).json(copy);
+  });
+
   router.patch('/:id/pin', (req: Request, res: Response) => {
     const note = store.togglePin(req.params.id);
     if (!note) {
@@ -229,6 +238,18 @@ export function createNotesRouter(store: NoteStore): Router {
     res.set('X-Content-Type-Options', 'nosniff');
     res.set('Content-Length', String(att.size));
     res.send(att.data);
+  });
+
+  router.delete('/:id/attachments/:name', (req: Request, res: Response) => {
+    // deleteAttachment sanitises the filename internally — client cannot control
+    // the storage key. Returns undefined if the note is missing, false if the
+    // attachment is missing, true on successful deletion.
+    const result = store.deleteAttachment(req.params.id, req.params.name);
+    if (result === undefined || result === false) {
+      res.status(404).json({ error: 'not found' });
+      return;
+    }
+    res.status(204).end();
   });
 
   return router;

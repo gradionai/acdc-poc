@@ -71,6 +71,22 @@ export class NoteStore {
     return updated;
   }
 
+  /**
+   * Duplicate an existing note: copies title (prefixed "Copy of …"), body, and
+   * tags into a brand-new note.  The duplicate gets its own id and createdAt
+   * timestamp, is not pinned, and does not inherit any attachments.
+   * Returns undefined when the source note does not exist.
+   */
+  duplicate(id: string): Note | undefined {
+    const source = this.notes.get(id);
+    if (!source) return undefined;
+    return this.create({
+      title: `Copy of ${source.title}`,
+      body: source.body,
+      tags: [...source.tags],
+    });
+  }
+
   togglePin(id: string): Note | undefined {
     const existing = this.notes.get(id);
     if (!existing) return undefined;
@@ -160,6 +176,17 @@ export class NoteStore {
     if (!this.notes.has(noteId)) return undefined;
     const safeName = this.sanitiseFilename(filename);
     return this.attachments.get(`${noteId}/${safeName}`);
+  }
+
+  /**
+   * Delete a single attachment from a note.
+   * Returns `true` if deleted, `false` if the note exists but the attachment
+   * does not, and `undefined` if the note itself does not exist.
+   */
+  deleteAttachment(noteId: string, filename: string): boolean | undefined {
+    if (!this.notes.has(noteId)) return undefined;
+    const safeName = this.sanitiseFilename(filename);
+    return this.attachments.delete(`${noteId}/${safeName}`);
   }
 
   listAttachments(noteId: string): AttachmentMeta[] | undefined {

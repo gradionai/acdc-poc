@@ -69,6 +69,23 @@ function mockFetchSequence() {
         return new Response(JSON.stringify(metas), { status: 200 });
       }
 
+      // DELETE /api/notes/:id/attachments/:filename
+      if (init?.method === 'DELETE' && /\/api\/notes\/[^/]+\/attachments\/[^/]+$/.test(urlStr)) {
+        const parts = urlStr.split('/');
+        const noteId = parts.at(-3) ?? '';
+        const filename = decodeURIComponent(parts.at(-1) ?? '');
+        if (!notes.find((n) => n.id === noteId)) {
+          return new Response(JSON.stringify({ error: 'not found' }), { status: 404 });
+        }
+        const atts = attachmentStore[noteId] ?? [];
+        const idx = atts.findIndex((a) => a.filename === filename);
+        if (idx === -1) {
+          return new Response(JSON.stringify({ error: 'not found' }), { status: 404 });
+        }
+        atts.splice(idx, 1);
+        return new Response(null, { status: 204 });
+      }
+
       if (init?.method === 'PATCH' && /\/api\/notes\/[^/]+\/pin$/.test(urlStr)) {
         const noteId = urlStr.split('/').at(-2) ?? '';
         const idx = notes.findIndex((n) => n.id === noteId);
@@ -78,6 +95,25 @@ function mockFetchSequence() {
         notes[idx] = { ...notes[idx], pinned: !notes[idx].pinned };
         return new Response(JSON.stringify(notes[idx]), { status: 200 });
       }
+
+      // POST /api/notes/:id/duplicate
+      if (init?.method === 'POST' && /\/api\/notes\/[^/]+\/duplicate$/.test(urlStr)) {
+        const noteId = urlStr.split('/').at(-2) ?? '';
+        const source = notes.find((n) => n.id === noteId);
+        if (!source) {
+          return new Response(JSON.stringify({ error: 'not found' }), { status: 404 });
+        }
+        const copy: MockNote = {
+          id: String(++seq),
+          title: `Copy of ${source.title}`,
+          body: source.body,
+          tags: [...source.tags],
+          pinned: false,
+        };
+        notes.push(copy);
+        return new Response(JSON.stringify(copy), { status: 201 });
+      }
+
       if (init?.method === 'POST') {
         const b = JSON.parse(String(init.body)) as {
           title: string;
@@ -742,6 +778,91 @@ describe('App — attachments', () => {
     await waitFor(() => expect(screen.getByText('hello.txt')).toBeInTheDocument());
     expect(screen.queryByText(/no attachments yet/i)).not.toBeInTheDocument();
   });
+
+  it('shows a Delete button for each attachment', async () => {
+    render(<App />);
+    await userEvent.type(screen.getByLabelText(/^title$/i), 'Delete btn note');
+    await userEvent.type(screen.getByLabelText(/^body$/i), 'body');
+    await userEvent.click(screen.getByRole('button', { name: /add note/i }));
+    await waitFor(() => expect(screen.getByText('Delete btn note')).toBeInTheDocument());
+
+    await userEvent.click(screen.getByRole('button', { name: /attachments for delete btn note/i }));
+    await waitFor(() => expect(screen.getByText(/no attachments yet/i)).toBeInTheDocument());
+
+    const file = new File(['x'], 'btn-test.txt', { type: 'text/plain' });
+    const uploadInput = screen.getByLabelText(/upload attachment for delete btn note/i);
+    await userEvent.upload(uploadInput, file);
+
+    await waitFor(() =>
+      expect(
+        screen.getByRole('button', { name: /delete attachment btn-test\.txt/i }),
+      ).toBeInTheDocument(),
+    );
+  });
+
+  it('deletes an attachment after confirmation and removes it from the list', async () => {
+    vi.stubGlobal(
+      'confirm',
+      vi.fn(() => true),
+    );
+
+    render(<App />);
+    await userEvent.type(screen.getByLabelText(/^title$/i), 'Del att note');
+    await userEvent.type(screen.getByLabelText(/^body$/i), 'body');
+    await userEvent.click(screen.getByRole('button', { name: /add note/i }));
+    await waitFor(() => expect(screen.getByText('Del att note')).toBeInTheDocument());
+
+    await userEvent.click(screen.getByRole('button', { name: /attachments for del att note/i }));
+    await waitFor(() => expect(screen.getByText(/no attachments yet/i)).toBeInTheDocument());
+
+    // Upload two attachments
+    const fileA = new File(['a'], 'alpha.txt', { type: 'text/plain' });
+    const fileB = new File(['b'], 'beta.txt', { type: 'text/plain' });
+    const uploadInput = screen.getByLabelText(/upload attachment for del att note/i);
+
+    await userEvent.upload(uploadInput, fileA);
+    await waitFor(() => expect(screen.getByText('alpha.txt')).toBeInTheDocument());
+
+    await userEvent.upload(uploadInput, fileB);
+    await waitFor(() => expect(screen.getByText('beta.txt')).toBeInTheDocument());
+
+    // Delete alpha.txt
+    await userEvent.click(screen.getByRole('button', { name: /delete attachment alpha\.txt/i }));
+
+    // alpha.txt gone, beta.txt remains
+    await waitFor(() => expect(screen.queryByText('alpha.txt')).not.toBeInTheDocument());
+    expect(screen.getByText('beta.txt')).toBeInTheDocument();
+
+    vi.unstubAllGlobals();
+  });
+
+  it('does not delete when confirmation is cancelled', async () => {
+    vi.stubGlobal(
+      'confirm',
+      vi.fn(() => false),
+    );
+
+    render(<App />);
+    await userEvent.type(screen.getByLabelText(/^title$/i), 'Cancel del note');
+    await userEvent.type(screen.getByLabelText(/^body$/i), 'body');
+    await userEvent.click(screen.getByRole('button', { name: /add note/i }));
+    await waitFor(() => expect(screen.getByText('Cancel del note')).toBeInTheDocument());
+
+    await userEvent.click(screen.getByRole('button', { name: /attachments for cancel del note/i }));
+    await waitFor(() => expect(screen.getByText(/no attachments yet/i)).toBeInTheDocument());
+
+    const file = new File(['x'], 'nodelet.txt', { type: 'text/plain' });
+    const uploadInput = screen.getByLabelText(/upload attachment for cancel del note/i);
+    await userEvent.upload(uploadInput, file);
+    await waitFor(() => expect(screen.getByText('nodelet.txt')).toBeInTheDocument());
+
+    await userEvent.click(screen.getByRole('button', { name: /delete attachment nodelet\.txt/i }));
+
+    // File should still be present
+    expect(screen.getByText('nodelet.txt')).toBeInTheDocument();
+
+    vi.unstubAllGlobals();
+  });
 });
 
 describe('attachment mock — 404 contract', () => {
@@ -769,6 +890,46 @@ describe('attachment mock — 404 contract', () => {
   it('returns 404 for GET attachments on a valid-looking but non-existent numeric note id', async () => {
     const res = await fetch('/api/notes/99999/attachments');
     expect(res.status).toBe(404);
+  });
+});
+
+describe('App — word/character count', () => {
+  beforeEach(() => mockFetchSequence());
+
+  it('shows "0 words, 0 characters" initially when body is empty', async () => {
+    render(<App />);
+    expect(screen.getByText('0 words, 0 characters')).toBeInTheDocument();
+  });
+
+  it('updates word and character count as user types in the body field', async () => {
+    render(<App />);
+    const bodyInput = screen.getByLabelText(/^body$/i);
+    await userEvent.type(bodyInput, 'hello world');
+    expect(screen.getByText('2 words, 11 characters')).toBeInTheDocument();
+  });
+
+  it('uses singular "word" when count is 1', async () => {
+    render(<App />);
+    const bodyInput = screen.getByLabelText(/^body$/i);
+    await userEvent.type(bodyInput, 'hello');
+    expect(screen.getByText('1 word, 5 characters')).toBeInTheDocument();
+  });
+
+  it('uses singular "character" when count is 1', async () => {
+    render(<App />);
+    const bodyInput = screen.getByLabelText(/^body$/i);
+    await userEvent.type(bodyInput, 'a');
+    expect(screen.getByText('1 word, 1 character')).toBeInTheDocument();
+  });
+
+  it('resets count to 0 after note is submitted', async () => {
+    render(<App />);
+    await userEvent.type(screen.getByLabelText(/^title$/i), 'My note');
+    await userEvent.type(screen.getByLabelText(/^body$/i), 'hello world');
+    expect(screen.getByText('2 words, 11 characters')).toBeInTheDocument();
+    await userEvent.click(screen.getByRole('button', { name: /add note/i }));
+    await waitFor(() => expect(screen.getByText('My note')).toBeInTheDocument());
+    expect(screen.getByText('0 words, 0 characters')).toBeInTheDocument();
   });
 });
 
@@ -919,5 +1080,52 @@ describe('App — dark mode toggle', () => {
 
     expect(document.documentElement.getAttribute('data-theme')).toBe('light');
     expect(localStorage.getItem('theme')).toBe('light');
+  });
+});
+
+describe('App — duplicate', () => {
+  beforeEach(() => mockFetchSequence());
+
+  it('shows a Duplicate button for each note', async () => {
+    render(<App />);
+    await userEvent.type(screen.getByLabelText(/^title$/i), 'Dup me');
+    await userEvent.type(screen.getByLabelText(/^body$/i), 'body');
+    await userEvent.click(screen.getByRole('button', { name: /add note/i }));
+    await waitFor(() => expect(screen.getByText('Dup me')).toBeInTheDocument());
+
+    expect(screen.getByRole('button', { name: /duplicate dup me/i })).toBeInTheDocument();
+  });
+
+  it('clicking Duplicate creates a copy with prefixed title in the list', async () => {
+    render(<App />);
+    await userEvent.type(screen.getByLabelText(/^title$/i), 'Original note');
+    await userEvent.type(screen.getByLabelText(/^body$/i), 'the body');
+    await userEvent.click(screen.getByRole('button', { name: /add note/i }));
+    await waitFor(() => expect(screen.getByText('Original note')).toBeInTheDocument());
+
+    await userEvent.click(screen.getByRole('button', { name: /duplicate original note/i }));
+    await waitFor(() => expect(screen.getByText('Copy of Original note')).toBeInTheDocument());
+  });
+
+  it('the copy and the original are independent — editing one does not affect the other', async () => {
+    render(<App />);
+    await userEvent.type(screen.getByLabelText(/^title$/i), 'Source');
+    await userEvent.type(screen.getByLabelText(/^body$/i), 'body');
+    await userEvent.click(screen.getByRole('button', { name: /add note/i }));
+    await waitFor(() => expect(screen.getByText('Source')).toBeInTheDocument());
+
+    await userEvent.click(screen.getByRole('button', { name: /duplicate source/i }));
+    await waitFor(() => expect(screen.getByText('Copy of Source')).toBeInTheDocument());
+
+    // Edit the original
+    await userEvent.click(screen.getByRole('button', { name: /^edit source$/i }));
+    const editTitle = screen.getByRole('textbox', { name: /edit title/i });
+    await userEvent.clear(editTitle);
+    await userEvent.type(editTitle, 'Source EDITED');
+    await userEvent.click(screen.getByRole('button', { name: /save/i }));
+
+    await waitFor(() => expect(screen.getByText('Source EDITED')).toBeInTheDocument());
+    // The copy should still have its original title
+    expect(screen.getByText('Copy of Source')).toBeInTheDocument();
   });
 });
