@@ -14,6 +14,7 @@ import {
   type Note,
 } from './api';
 import { Button } from './components/Button';
+import { ConfirmDialog } from './ConfirmDialog';
 import { NoteBody } from './NoteBody';
 import { ToastContainer } from './ToastContainer';
 import { useTheme } from './useTheme';
@@ -59,6 +60,13 @@ export function App() {
   const [attachmentsOpen, setAttachmentsOpen] = useState<Record<string, boolean>>({});
   /** noteId → upload error string. */
   const [uploadError, setUploadError] = useState<Record<string, string | null>>({});
+  /**
+   * When non-null, the confirm dialog is open and this holds the id of the note
+   * pending deletion.
+   */
+  const [pendingDeleteId, setPendingDeleteId] = useState<string | null>(null);
+  /** Ref to the delete button that triggered the dialog; focus returns here on close. */
+  const deleteTriggerRef = useRef<HTMLButtonElement | null>(null);
 
   // Monotonically increasing counter; each refresh call captures its own id
   // and only applies its result if no newer request has been issued since.
@@ -236,7 +244,26 @@ export function App() {
     }
   }
 
-  async function onDelete(id: string) {
+  /** Opens the confirm dialog for deleting a note. */
+  function onDeleteRequest(id: string, triggerEl: HTMLButtonElement) {
+    deleteTriggerRef.current = triggerEl;
+    setPendingDeleteId(id);
+  }
+
+  /** Cancels the confirm dialog without deleting anything. */
+  function onDeleteCancel() {
+    setPendingDeleteId(null);
+    deleteTriggerRef.current?.focus();
+    deleteTriggerRef.current = null;
+  }
+
+  /** Performs the actual deletion after the user confirmed. */
+  async function onDeleteConfirm() {
+    if (!pendingDeleteId) return;
+    const id = pendingDeleteId;
+    setPendingDeleteId(null);
+    deleteTriggerRef.current?.focus();
+    deleteTriggerRef.current = null;
     try {
       await deleteNote(id);
       setError(null);
@@ -443,7 +470,7 @@ export function App() {
                 <Button
                   variant="danger"
                   aria-label={`Delete ${n.title}`}
-                  onClick={() => void onDelete(n.id)}
+                  onClick={(e) => onDeleteRequest(n.id, e.currentTarget)}
                 >
                   Delete
                 </Button>
@@ -538,6 +565,15 @@ export function App() {
         </Button>
       </nav>
       <ToastContainer toasts={toasts} onDismiss={dismissToast} />
+      {pendingDeleteId !== null && (
+        <ConfirmDialog
+          title="Delete note"
+          message={`Delete "${notes.find((n) => n.id === pendingDeleteId)?.title ?? 'this note'}"? This cannot be undone.`}
+          confirmLabel="Delete"
+          onConfirm={() => void onDeleteConfirm()}
+          onCancel={onDeleteCancel}
+        />
+      )}
     </main>
   );
 }
