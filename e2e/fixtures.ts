@@ -14,7 +14,16 @@ export const test = base.extend<{ _reset: void }>({
 });
 
 /**
+ * Open the overflow ("More actions") menu on a note list item.
+ * The Delete and Duplicate actions live behind this menu.
+ */
+export async function openOverflowMenu(item: Locator): Promise<void> {
+  await item.getByRole('button', { name: /more actions/i }).click();
+}
+
+/**
  * Click the Delete button on a note list item and confirm the ConfirmDialog.
+ * Automatically opens the overflow menu first since Delete is in the overflow.
  * Pass the list item locator as `item`; optionally narrow the delete-button
  * selector via `deleteName` (defaults to /delete/i).
  */
@@ -22,7 +31,8 @@ export async function confirmDeleteNote(
   item: Locator,
   deleteName: string | RegExp = /delete/i,
 ): Promise<void> {
-  await item.getByRole('button', { name: deleteName }).click();
+  await openOverflowMenu(item);
+  await item.getByRole('menuitem', { name: deleteName }).click();
   const dialog = item.page().getByRole('dialog');
   await expect(dialog).toBeVisible();
   await dialog.getByRole('button', { name: /^delete$/i }).click();

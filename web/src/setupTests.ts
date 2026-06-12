@@ -18,3 +18,37 @@ Object.defineProperty(window, 'matchMedia', {
     dispatchEvent: vi.fn(),
   })),
 });
+
+// Replace every lucide-react icon with a trivial null-rendering stub so that
+// jsdom does not parse heavy inline SVGs. This dramatically speeds up unit
+// tests that render large note lists (NoteCard renders ~9 icons each).
+// We enumerate every icon imported across the codebase; the stub returns null
+// which is a valid React render result.
+vi.mock('lucide-react', () => {
+  function IconStub() {
+    return null;
+  }
+  return {
+    AlertTriangle: IconStub,
+    Archive: IconStub,
+    ArchiveRestore: IconStub,
+    CheckCircle2: IconStub,
+    ChevronLeft: IconStub,
+    ChevronRight: IconStub,
+    Copy: IconStub,
+    FileText: IconStub,
+    HelpCircle: IconStub,
+    Moon: IconStub,
+    MoreHorizontal: IconStub,
+    Paperclip: IconStub,
+    Pencil: IconStub,
+    Pin: IconStub,
+    PinOff: IconStub,
+    SearchX: IconStub,
+    Sun: IconStub,
+    Tag: IconStub,
+    Trash2: IconStub,
+    X: IconStub,
+    XCircle: IconStub,
+  };
+});

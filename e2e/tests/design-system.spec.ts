@@ -1,4 +1,4 @@
-import { test, expect, confirmDeleteNote } from '../fixtures';
+import { test, expect, confirmDeleteNote, openOverflowMenu } from '../fixtures';
 
 /**
  * Design-system e2e spec.
@@ -53,8 +53,12 @@ test('Button variants render with correct accessible roles', async ({ page }) =>
   await expect(item.getByRole('button', { name: /^edit/i })).toBeVisible();
   await expect(item.getByRole('button', { name: /^pin/i })).toBeVisible();
 
-  // Danger button
-  await expect(item.getByRole('button', { name: /^delete/i })).toBeVisible();
+  // Danger button is in the overflow menu — open it first
+  await openOverflowMenu(item);
+  await expect(item.getByRole('menuitem', { name: /^delete/i })).toBeVisible();
+  // Close overflow by clicking the toggle button again
+  await openOverflowMenu(item);
+  await expect(item.getByRole('menuitem', { name: /^delete/i })).toHaveCount(0);
 
   // Clean up — delete the note
   await confirmDeleteNote(item, /^delete/i);
