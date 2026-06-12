@@ -20,7 +20,7 @@ async function visibleNoteTitles(page: import('@playwright/test').Page): Promise
   const count = await items.count();
   const titles: string[] = [];
   for (let i = 0; i < count; i++) {
-    const titleEl = items.nth(i).locator('span').first();
+    const titleEl = items.nth(i).getByRole('heading').first();
     const text = await titleEl.textContent();
     if (text) titles.push(text.trim());
   }
