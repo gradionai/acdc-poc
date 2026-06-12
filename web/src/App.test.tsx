@@ -2269,9 +2269,14 @@ describe('App — create with pinned notes', () => {
     await waitFor(() => expect(screen.getByText('PinnedOld 1')).toBeInTheDocument());
 
     // Create a new (unpinned) note — with 10 pinned notes + 1 unpinned = 11 total
-    // Pinned fill pages 1 (5 pinned) and 2 (5 pinned); unpinned lands on page 3
-    await userEvent.type(screen.getByLabelText(/^title$/i), 'New unpinned oldest');
-    await userEvent.type(screen.getByLabelText(/^body$/i), 'body');
+    // Pinned fill pages 1 (5 pinned) and 2 (5 pinned); unpinned lands on page 3.
+    // Set the fields with fireEvent.change rather than userEvent.type: with 11
+    // notes rendered, per-keystroke re-renders are slow enough to flake the
+    // downstream navigation assertion on constrained CI runners.
+    fireEvent.change(screen.getByLabelText(/^title$/i), {
+      target: { value: 'New unpinned oldest' },
+    });
+    fireEvent.change(screen.getByLabelText(/^body$/i), { target: { value: 'body' } });
     await userEvent.click(screen.getByRole('button', { name: /add note/i }));
 
     // Must navigate to page 3 — not page 2 (what an "oldest→last page" shortcut would compute)
