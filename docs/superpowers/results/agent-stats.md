@@ -129,3 +129,44 @@
   memory cap, sort/duplicate nav edge cases, and the Escape/confirm-dialog focus race.
 
 _Generation-side, approximate; maintained going forward (UI phase #77–#82 next)._
+
+---
+
+## Phase 2 — UI redesign + deferred features (summary)
+
+After the 49-agent Phase-1 feature drain (precise per-agent rows above), Phase 2
+delivered the **Clean & minimal UI redesign** (decompose App.tsx, design tokens +
+per-component CSS modules, icon cards, composer/toolbar, state polish, full mobile
+responsiveness) and the **deferred features** (trash/restore, tag colors, multi-tag
+filter, tag autocomplete, image thumbnails, accessibility pass + axe-core gate).
+
+**Outcome:** board 36/36 Done, 0 open PRs.
+
+**Phase-2 telemetry is summarized, not per-agent backfilled** (~45 subagent
+invocations: implementers + a high proportion of resolver / re-sync / recovery
+agents). Order-of-magnitude: comparable to Phase 1 (~3M output tokens, ~$45
+output-only / ~$135–270 all-in for the phase). The dominant cost was again
+**re-sync + resolve**, not first-pass implementation.
+
+### What drove Phase-2 cost (the lessons)
+- **Overlapping feature PRs** (shared `App.tsx`/`store.ts`/`FilterBar`) forced an
+  O(n) serial-merge-with-resync drain. The App.tsx decompose removed the cascade for
+  CSS-only UI restyles (separate modules) but features still share logic files.
+- **A chronic flaky test** (a structurally-racy full-App navigation integration test)
+  cost many re-runs across PRs until root-fixed by extracting a pure `pageOfNoteById`
+  helper + unit test + relying on e2e (PR #95). Lesson: fix flaky-test *design*, not
+  timeouts.
+- **Reviewer false positives**: Gitar flagged `lucide-react@1.x` and `typescript@6.x`
+  as "non-canonical" (both are the genuine npm `latest`, post its knowledge cutoff).
+  Handled via a `.gitar/rules` rule + verified documented overrides. A human/
+  orchestrator check is needed to separate real findings from stale-knowledge noise.
+- **Network drops** (laptop lock / lunch) killed in-flight agents repeatedly; work was
+  always recoverable from worktrees (committed or uncommitted). Mitigation: an
+  always-on host (the dark-factory direction).
+
+### Headline ROI
+Full PoC = 36 backlog issues shipped autonomously (generate → verify → review →
+resolve → merge) across ~95 subagent invocations, est. low-hundreds of USD all-in.
+Layered verification (CI e2e + SonarCloud + Gitar/CodeRabbit) repeatedly caught real
+bugs unit tests missed (WCAG contrast/touch-targets, ARIA roles, rate-limiter
+throttling, memory cap, nav edge cases, menu-dismissal a11y) — the core AC/DC thesis.
