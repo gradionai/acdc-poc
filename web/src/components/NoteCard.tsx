@@ -1,5 +1,5 @@
-import type { ChangeEvent, DragEvent, KeyboardEvent } from 'react';
-import { useRef, useState } from 'react';
+import type { ChangeEvent, DragEvent } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import {
   Pin,
   PinOff,
@@ -62,12 +62,16 @@ function IconButton({
   variant = 'ghost',
   children,
   buttonRef,
+  'aria-haspopup': ariaHasPopup,
+  'aria-expanded': ariaExpanded,
 }: {
   label: string;
   onClick: (e: React.MouseEvent<HTMLButtonElement>) => void;
   variant?: 'ghost' | 'danger';
   children: React.ReactNode;
   buttonRef?: React.RefObject<HTMLButtonElement>;
+  'aria-haspopup'?: React.AriaAttributes['aria-haspopup'];
+  'aria-expanded'?: React.AriaAttributes['aria-expanded'];
 }) {
   return (
     <button
@@ -76,6 +80,8 @@ function IconButton({
       aria-label={label}
       title={label}
       onClick={onClick}
+      aria-haspopup={ariaHasPopup}
+      aria-expanded={ariaExpanded}
       className={`${styles.iconBtn} ${variant === 'danger' ? styles.iconBtnDanger : ''}`}
     >
       {children}
@@ -118,14 +124,38 @@ export function NoteCard({
 
   function closeOverflow() {
     setOverflowOpen(false);
+    overflowBtnRef.current?.focus();
   }
 
-  function handleOverflowKeyDown(e: KeyboardEvent<HTMLDivElement>) {
-    if (e.key === 'Escape') {
-      closeOverflow();
-      overflowBtnRef.current?.focus();
+  // While the overflow menu is open, listen for outside-clicks and Escape so
+  // the menu can be dismissed.  The `onKeyDown` on the menu div never fires
+  // because focus stays on the trigger button, hence the document-level handler.
+  useEffect(() => {
+    if (!overflowOpen) return;
+
+    function handleMouseDown(e: MouseEvent) {
+      const target = e.target as Node;
+      // Ignore clicks on the trigger itself — its own onClick handles the toggle
+      // so we don't double-fire (mousedown would close and onClick would re-open).
+      if (overflowBtnRef.current?.contains(target)) return;
+      if (menuRef.current && !menuRef.current.contains(target)) {
+        closeOverflow();
+      }
     }
-  }
+
+    function handleKeyDown(e: globalThis.KeyboardEvent) {
+      if (e.key === 'Escape') {
+        closeOverflow();
+      }
+    }
+
+    document.addEventListener('mousedown', handleMouseDown);
+    document.addEventListener('keydown', handleKeyDown);
+    return () => {
+      document.removeEventListener('mousedown', handleMouseDown);
+      document.removeEventListener('keydown', handleKeyDown);
+    };
+  }, [overflowOpen]);
 
   if (editingId === n.id) {
     return (
@@ -276,17 +306,14 @@ export function NoteCard({
             label="More actions"
             buttonRef={overflowBtnRef}
             onClick={() => setOverflowOpen((v) => !v)}
+            aria-haspopup="menu"
+            aria-expanded={overflowOpen}
           >
             <MoreHorizontal size={16} aria-hidden="true" />
           </IconButton>
 
           {overflowOpen && (
-            <div
-              ref={menuRef}
-              className={styles.overflowMenu}
-              role="menu"
-              onKeyDown={handleOverflowKeyDown}
-            >
+            <div ref={menuRef} className={styles.overflowMenu} role="menu">
               {!n.archived && (
                 <button
                   type="button"

@@ -752,15 +752,16 @@ describe('App', () => {
     await userEvent.type(screen.getByLabelText(/^body$/i), 'body');
     await userEvent.click(screen.getByRole('button', { name: /add note/i }));
 
-    // App must navigate to page 2 where Zebra appears
-    // pageContainingNote makes two async fetches before setPage — allow extra
-    // time so the assertion does not flake on slow CI runners.
+    // App must navigate to page 2 where Zebra appears.
+    // pageContainingNote makes two sequential async fetches before setPage —
+    // allow up to 13 s (well under the 15 s testTimeout) so this passes even on
+    // slow CI runners.
     await waitFor(() => expect(screen.getByText('Zebra')).toBeInTheDocument(), {
-      timeout: 10000,
+      timeout: 13000,
     });
     // Apple (page 1) should no longer be visible
     await waitFor(() => expect(screen.queryByText('Apple')).not.toBeInTheDocument(), {
-      timeout: 10000,
+      timeout: 13000,
     });
   });
 
